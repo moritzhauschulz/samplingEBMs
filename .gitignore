@@ -8,7 +8,8 @@ methods/punidb_noise=1/results/
 methods/punidb_noise=0/results/
 methods/punidb/results/
 methods/ed_ebm/ckpts/
-methods/ebm_runidb/results/      
+methods/ebm_runidb/results/   
+methods/cd_ebm/results/       
 
 #env
 myenv

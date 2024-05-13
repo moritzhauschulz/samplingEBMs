@@ -11,6 +11,9 @@ from methods.punidb.train import main_loop as punidb_main_loop
 from methods.ed_ebm.train import main_loop as ed_ebm_main_loop
 from methods.ebm_runidb.train import main_loop as ebm_runidb_main_loop
 
+from methods.cd_ebm.train import main_loop as cd_ebm_main_loop
+
+
 def get_args():
     parser = argparse.ArgumentParser(description='Pipeline')
 
@@ -18,6 +21,7 @@ def get_args():
         choices=[
             'punidb', 'runidb',
             'ed_ebm', 'ebm_runidb',
+            'cd_ebm'
         ],
     )
 

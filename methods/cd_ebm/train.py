@@ -1,3 +1,4 @@
+import sys
 import os
 import torch
 import shutil
@@ -29,13 +30,13 @@ class Sampler:
             max_len - Maximum number of data points to keep in the buffer
         """
         super().__init__()
+        self.args = args
         self.db = db
         self.discrete_dim = args.discrete_dim
         self.sample_size = sample_size
         self.max_len = max_len
 
-    #@staticmethod
-    def generate_samples(self, model, steps=60):
+    def generate_samples(self, model, chains=32, thinning=4, batch_size=128, burn_in=64):
         """
         Function for performing Gibbs sampling on a given model. 
         Inputs:
@@ -43,13 +44,19 @@ class Sampler:
             steps - Number of iterations in the MCMC algorithm.
         """
         assert self.args.vocab_size == 2, 'gibbs sampling only implemented for binary data'
-        samples = get_batch_data(self.db, self.args, batch_size=500)
-        B, D = samples.size()
+        assert (batch_size * thinning) % chains  == 0, 'chains must devide batch_size * thinning'
+
+        samples = torch.from_numpy(get_batch_data(self.db, self.args, batch_size=chains))
+        B, D = samples.shape
 
         model.eval()
         
+        iterations = burn_in + ((batch_size - 1) * thinning) // chains 
         # Perform Gibbs sampling
-        for _ in range(steps):
+
+        output = None
+        for i in range(iterations):
+
             
             for dim in range(D):
                 dim_1, dim_0 = samples.clone(), samples.clone()
@@ -59,7 +66,14 @@ class Sampler:
                 dim_x = torch.bernoulli(cond_prob_1)
                 samples[:,dim] = dim_x
 
-        return samples
+            if burn_in != 0:
+                burn_in -= 1
+            elif output is None:
+                output = samples.clone() 
+            elif (i + 1) % thinning == 0:
+                output = torch.cat((output, samples), dim = 0)
+        
+        return output
 
 def main_loop(db, args, verbose=False):
 
@@ -85,14 +99,14 @@ def main_loop(db, args, verbose=False):
         for it in pbar:
             data_samples = get_batch_data(db, args)
             data_samples = torch.from_numpy(np.float32(data_samples)).to(args.device)
-            model_samples = sampler.generate_samples(model, steps=100).to(args.device)
+            model_samples = sampler.generate_samples(model, batch_size=128).to(args.device)
 
             data_nrg = model(data_samples)
             model_nrg = model(model_samples)
 
-            reg_loss = args.cd_alpha * (data_nrg ** 2 + model_nrg ** 2).mean()
+            reg_loss = args.cd_alpha * (data_nrg ** 2 + model_nrg ** 2)
             cd_loss = data_nrg - model_nrg
-            loss = reg_loss + cd_loss
+            loss = (reg_loss + cd_loss).logsumexp(dim=-1).mean()
 
             optimizer.zero_grad()
             loss.backward()
