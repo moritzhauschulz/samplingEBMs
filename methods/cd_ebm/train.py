@@ -20,7 +20,7 @@ def get_batch_data(db, args, batch_size=None):
 
 class Sampler:
 
-    def __init__(self, model, db, args, sample_size, max_len=8192):
+    def __init__(self, db, args, sample_size, max_len=8192):
         """
         Inputs:
             model - Neural network to use for modeling E_theta
@@ -29,7 +29,6 @@ class Sampler:
             max_len - Maximum number of data points to keep in the buffer
         """
         super().__init__()
-        self.model = model
         self.db = db
         self.discrete_dim = args.discrete_dim
         self.sample_size = sample_size
@@ -73,8 +72,8 @@ def main_loop(db, args, verbose=False):
         shutil.rmtree(plot_path)
     os.makedirs(plot_path, exist_ok=True)
 
-    samples = get_batch_data(db, args, batch_size=50000)
-    mean = np.mean(samples, axs=0)
+    sampler = Sampler(db, args, sample_size=1000)
+
     net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
     model = EBM(net).to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
@@ -85,7 +84,36 @@ def main_loop(db, args, verbose=False):
 
         for it in pbar:
             data_samples = get_batch_data(db, args)
-            data_samples = torch.from_numpy(np.float32(samples)).to(args.device)
+            data_samples = torch.from_numpy(np.float32(data_samples)).to(args.device)
+            model_samples = sampler.generate_samples(model, steps=100).to(args.device)
+
+            data_nrg = model(data_samples)
+            model_nrg = model(model_samples)
+
+            reg_loss = args.cd_alpha * (data_nrg ** 2 + model_nrg ** 2).mean()
+            cd_loss = data_nrg - model_nrg
+            loss = reg_loss + cd_loss
+
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
+            optimizer.step()     
+
+            if verbose:
+                pbar.set_description(f'Epoch {epoch} Iter {it} Loss {loss.item()}')
+
+        if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs - 1):
+
+            torch.save(model.state_dict(), f'{ckpt_path}/model_{epoch}.pt')
+
+            if args.vocab_size == 2:
+                utils.plot_heat(model, db.f_scale, args.bm, f'{plot_path}/heat_{epoch}.pdf', args)
+                utils.plot_sampler(model, f'{plot_path}/samples_{epoch}.png', args)
+
+ 
+        
+
+
 
 
             

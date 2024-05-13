@@ -24,6 +24,7 @@ def get_args():
     parser.add_argument('--data_name', type=str, default='moons')
     parser.add_argument('--discrete_dim', type=int, default=16)
     parser.add_argument('--vocab_size', type=int, default=5)
+    parser.add_argument('--cd_alpha', type=float, default=0.1)
 
     parser.add_argument('--mps', action='store_true', help='Try using apple silicon chip (if no gpu available)')
     parser.add_argument('--noise', type=int, default=1)
