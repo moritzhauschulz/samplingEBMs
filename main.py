@@ -17,7 +17,7 @@ def get_args():
     parser.add_argument('--methods', type=str, default='punidb', 
         choices=[
             'punidb', 'runidb',
-            'ed_ebm', 'ebm_runidb'
+            'ed_ebm', 'ebm_runidb',
         ],
     )
 
@@ -25,6 +25,9 @@ def get_args():
     parser.add_argument('--discrete_dim', type=int, default=16)
     parser.add_argument('--vocab_size', type=int, default=5)
 
+    parser.add_argument('--mps', action='store_true', help='Try using apple silicon chip (if no gpu available)')
+    parser.add_argument('--noise', type=int, default=1)
+    
     parser.add_argument('--gpu', type=int, default=0, help='-1: cpu; 0 - ?: specific gpu index')
     parser.add_argument('--batch_size', default=128, type=int, help='batch size')
 
@@ -35,17 +38,34 @@ def get_args():
     args = parser.parse_args()
 
     gpu = args.gpu
-    if torch.cuda.is_available() and gpu >= 0:
-        torch.cuda.set_device(gpu)
-        os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
-        args.device = torch.device('cuda:' + str(gpu))
-        print('use gpu indexed: %d' % gpu)
-    else:
-        args.device = torch.device('cpu')
-        print('use cpu')
 
-    args.save_dir = f'./methods/{args.methods}/results/voc_size={args.vocab_size}/{args.data_name}'
+    if args.mps:
+        if not torch.backends.mps.is_available():
+            if not torch.backends.mps.is_built():
+                print("MPS not available because the current PyTorch install was not "
+                    "built with MPS enabled.")
+            else:
+                print("MPS not available because the current MacOS version is not 12.3+ "
+                    "and/or you do not have an MPS-enabled device on this machine.")
+        else:
+            args.device = torch.device("mps")
+            print('using mps')
+    else:
+        if torch.cuda.is_available() and gpu >= 0:
+            torch.cuda.set_device(gpu)
+            os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+            os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu)
+            args.device = torch.device('cuda:' + str(gpu))
+            print('use gpu indexed: %d' % gpu)
+        else:
+            args.device = torch.device('cpu')
+            print('use cpu')
+
+    if args.methods == 'punidb':
+        noise_string = f'_noise={args.noise}'
+    else:
+        noise_string = ""
+    args.save_dir = f'./methods/{args.methods}{noise_string}/results/voc_size={args.vocab_size}/{args.data_name}'
     if os.path.exists(args.save_dir):
         shutil.rmtree(args.save_dir)
     os.makedirs(args.save_dir, exist_ok=True)

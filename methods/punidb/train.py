@@ -18,7 +18,7 @@ def gen_samples(model, args):
     t = 0.0
     dt = 0.001
     num_samples = 1000
-    noise = 1
+    noise = args.noise
     xt = torch.randint(0, S, (num_samples, D)).to(args.device)
 
     while t < 1.0:
@@ -95,7 +95,7 @@ def main_loop(db, args, verbose=False):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
+            
             if verbose:
                 pbar.set_description(f'Epoch {epoch} Iter {it} Loss {loss.item()} Acc {acc}')
 

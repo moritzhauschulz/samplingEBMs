@@ -82,6 +82,7 @@ def compute_loss(model, xt, x1, t, args):
     R_star = R_star.scatter_(-1, x1[:, :, None], 1.0) / (1 - t[:, None, None])
     R_star[xt == x1] = 0.0
     
+    #see F2.1. in appendix of Discrete Flow Models
     eta = 1.0
     R_DB_1 = torch.zeros((B, D, S)).to(args.device)
     R_DB_1[xt == x1] = 1 * eta

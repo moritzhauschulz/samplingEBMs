@@ -82,7 +82,7 @@ def main_loop(db, args, verbose=False):
 
     net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
     ebm_model = EBM(net, torch.from_numpy(mean)).to(args.device)
-    ebm_model.load_state_dict(torch.load(f'methods/ed_ebm/ckpts/{args.data_name}/model_999.pt'))
+    ebm_model.load_state_dict(torch.load(f'methods/ed_ebm/ckpts/{args.data_name}/model_999.pt', map_location=args.device))
     ebm_model.eval()
     utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.save_dir}/heat.pdf', args)
 
@@ -99,8 +99,7 @@ def main_loop(db, args, verbose=False):
             # mask = (torch.rand((args.batch_size,)).to(args.device) < 0.5).int().unsqueeze(1)
             # x1 = mask * x1_q + (1 - mask) * x1_p
 
-            x1 = q_dist.sample((args.batch_size,)).long()
-
+            x1 = q_dist.sample((args.batch_size,)).long() #remember that there is no data available under the assumptions
 
             (B, D), S = x1.size(), args.vocab_size
             t = torch.rand((B,)).to(args.device)
@@ -109,7 +108,7 @@ def main_loop(db, args, verbose=False):
             corrupt_mask = torch.rand((B, D)).to(args.device) < (1 - t[:, None])
             xt[corrupt_mask] = uniform_noise[corrupt_mask]
             
-            loss = compute_loss(ebm_model, flow_model, q_dist, xt, x1, t, args)
+            loss = compute_loss(ebm_model, flow_model, q_dist, xt, x1, t, args) #basically fit flow_model to ebm model
             
             optimizer.zero_grad()
             loss.backward()
