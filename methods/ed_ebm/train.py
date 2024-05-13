@@ -68,7 +68,7 @@ def main_loop(db, args, verbose=False):
             samples = torch.from_numpy(np.float32(samples)).to(args.device)
 
             if args.vocab_size == 2:
-                loss = energy_discrepancy_bernoulli(model, samples)
+                loss = energy_discrepancy_bernoulli(model, samples) #note that this is not exactly contrastive divergence
             else:
                 loss = ed_categorical(model, samples, K=args.vocab_size)
 
