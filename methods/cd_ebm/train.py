@@ -8,6 +8,9 @@ import torch.distributions as dists
 
 from utils import utils
 from methods.cd_ebm.model import MLPScore, EBM
+from utils import sampler
+
+
 
 def get_batch_data(db, args, batch_size=None):
     if batch_size is None:
@@ -19,7 +22,7 @@ def get_batch_data(db, args, batch_size=None):
         bx = utils.ourfloat2base(bx, args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
     return bx
 
-class Sampler:
+#class CustomGibbsSampler:
 
     def __init__(self, db, args, sample_size, max_len=8192):
         """
@@ -86,20 +89,27 @@ def main_loop(db, args, verbose=False):
         shutil.rmtree(plot_path)
     os.makedirs(plot_path, exist_ok=True)
 
-    sampler = Sampler(db, args, sample_size=1000)
+    #uncomment to use custom gibbs sampler
+    #sampler = Sampler(db, args, sample_size=1000)
+    
+    gibbs_sampler = sampler.GibbsSampler(args.vocab_size, args.discrete_dim, args.device)
 
     net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
     model = EBM(net).to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     for epoch in range(args.num_epochs):
-        model.train()
+
         pbar = tqdm(range(args.iter_per_epoch)) if verbose else range(args.iter_per_epoch)
 
         for it in pbar:
             data_samples = get_batch_data(db, args)
             data_samples = torch.from_numpy(np.float32(data_samples)).to(args.device)
-            model_samples = sampler.generate_samples(model, batch_size=128).to(args.device)
+            #uncomment to use custom gibbs sampler
+            #model_samples = sampler.generate_samples(model, batch_size=128).to(args.device)
+            model.eval() #double check
+            model_samples = gibbs_sampler.forward(model, 50, num_samples=args.batch_size)
+            model.train()
 
             data_nrg = model(data_samples)
             model_nrg = model(model_samples)
