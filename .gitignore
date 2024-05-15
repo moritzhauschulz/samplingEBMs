@@ -10,6 +10,8 @@ methods/punidb/results/
 methods/ed_ebm/ckpts/
 methods/ebm_runidb/results/   
 methods/cd_ebm/results/       
+methods/cd_ebm/ckpts/ 
+methods/cd_ebm/plots/
 
 #env
 myenv
