@@ -17,4 +17,4 @@ python main.py --data_name moons --methods runidb --gpu 0 --vocab_size 5
 python main.py --data_name moons --methods ebm_runidb --gpu 0 --vocab_size 2
 
 # train contrastive divergence on Binary dataset
-python main.py --data_name moons --methods cd_ebm --gpu 0 --vocab_size 2
+python main.py --data_name moons --methods cd_ebm --gpu 0 --vocab_size 2 --epoch_save 5
