@@ -82,12 +82,15 @@ def main_loop(db, args, verbose=False):
 
     ckpt_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/ckpts/{args.data_name}/'
     plot_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/plots/{args.data_name}/'
+    sample_path = f'{args.save_dir}/samples/'
     if os.path.exists(ckpt_path):
         shutil.rmtree(ckpt_path)
     os.makedirs(ckpt_path, exist_ok=True)
     if os.path.exists(plot_path):
         shutil.rmtree(plot_path)
     os.makedirs(plot_path, exist_ok=True)
+    if os.path.exists(sample_path):
+        os.makedirs(sample_path, exist_ok=True)
 
     #uncomment to use custom gibbs sampler
     #sampler = Sampler(db, args, sample_size=1000)

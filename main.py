@@ -21,7 +21,7 @@ def get_args():
         choices=[
             'punidb', 'runidb',
             'ed_ebm', 'ebm_runidb',
-            'cd_ebm'
+            'cd_ebm', 'cd_runi_inter'
         ],
     )
 
@@ -38,6 +38,8 @@ def get_args():
 
     parser.add_argument('--num_epochs', default=1000, type=int, help='num epochs')
     parser.add_argument('--iter_per_epoch', default=100, type=int, help='num iterations per epoch')
+    parser.add_argument('--dfs_iter_per_epoch', default=100, type=int, help='dfs: num iterations per epoch')
+    parser.add_argument('--ebm_iter_per_epoch', default=100, type=int, help='ebm: num iterations per epoch')
     parser.add_argument('--epoch_save', default=100, type=int, help='num epochs between save')
 
     args = parser.parse_args()
