@@ -29,6 +29,8 @@ NONLINEARITIES = {
     "identity": Lambda(lambda x: x),
 }
 
+
+
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dims, nonlinearity='elu', act_last=None, bn=False, dropout=-1):
         super(MLP, self).__init__()

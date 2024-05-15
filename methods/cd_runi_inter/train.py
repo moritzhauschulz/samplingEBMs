@@ -5,9 +5,11 @@ import shutil
 import numpy as np
 from tqdm import tqdm
 import torch.distributions as dists
+from torch.distributions.categorical import Categorical
 
 from utils import utils
-from methods.cd_ebm.model import MLPScore, EBM
+from methods.cd_runi_inter.model import MLPScore, EBM
+from methods.cd_runi_inter.model import MLPModel as MLPFlow
 from utils import sampler
 
 def get_batch_data(db, args, batch_size=None):
@@ -20,17 +22,18 @@ def get_batch_data(db, args, batch_size=None):
         bx = utils.ourfloat2base(bx, args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
     return bx
 
-def gen_samples(model, args):
+def gen_samples(model, args, batch_size=None):
     model.eval()
     S, D = args.vocab_size, args.discrete_dim
 
     t = 0.0
     dt = 0.001
-    num_samples = 1000
-    xt = torch.randint(0, S, (num_samples, D)).to(args.device)
+    if batch_size is None:
+        batch_size = args.batch_size
+    xt = torch.randint(0, S, (batch_size, D)).to(args.device)
 
     while t < 1.0:
-        t_ = t * torch.ones((num_samples,)).to(args.device)
+        t_ = t * torch.ones((batch_size,)).to(args.device)
         with torch.no_grad():
             step_probs = model(xt, t_) * dt
 
@@ -48,7 +51,7 @@ def gen_samples(model, args):
 
     return xt.detach().cpu().numpy()
 
-def compute_loss(ebm_model, bfs_model, q_dist, xt, x1, t, args):
+def compute_loss(ebm_model, dfs_model, q_dist, xt, x1, t, args):
     (B, D), S = x1.size(), args.vocab_size
 
     R_star = torch.zeros((B, D, S)).to(args.device)
@@ -63,7 +66,7 @@ def compute_loss(ebm_model, bfs_model, q_dist, xt, x1, t, args):
     R_DB = R_DB_1 + R_DB_2
 
     R_true = (R_star + R_DB) * (1 - t[:, None, None])
-    R_est = bfs_model(xt, t) * (1 - t[:, None, None])
+    R_est = dfs_model(xt, t) * (1 - t[:, None, None])
     loss = (R_est - R_true).square()
     loss.scatter_(-1, xt[:, :, None], 0.0)
     loss = loss.sum(dim=(1,2))
@@ -76,16 +79,34 @@ def compute_loss(ebm_model, bfs_model, q_dist, xt, x1, t, args):
 
 def main_loop(db, args, verbose=False):
 
-    ckpt_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/ckpts/{args.data_name}/'
-    plot_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/plots/{args.data_name}/'
-    if os.path.exists(ckpt_path):
-        shutil.rmtree(ckpt_path)
-    os.makedirs(ckpt_path, exist_ok=True)
-    if os.path.exists(plot_path):
-        shutil.rmtree(plot_path)
-    os.makedirs(plot_path, exist_ok=True)
+    dfs_ckpt_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/ckpts/dfs/{args.data_name}/'
+    dfs_plot_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/plots/dfs/{args.data_name}/'
+    dfs_sample_path = f'{args.save_dir}/dfs/samples'
+    if os.path.exists(dfs_ckpt_path):
+        shutil.rmtree(dfs_ckpt_path)
+    os.makedirs(dfs_ckpt_path, exist_ok=True)
+    if os.path.exists(dfs_plot_path):
+        shutil.rmtree(dfs_plot_path)
+    os.makedirs(dfs_plot_path, exist_ok=True)
+    if os.path.exists(dfs_sample_path):
+        shutil.rmtree(dfs_sample_path)
+    os.makedirs(dfs_sample_path, exist_ok=True)
 
-    samples = get_batch_data(db, args, batch_size=50000)
+    ebm_ckpt_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/ckpts/ebm/{args.data_name}/'
+    ebm_plot_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/plots/ebm/{args.data_name}/'
+    ebm_sample_path = f'{args.save_dir}/ebm/samples'
+    if os.path.exists(ebm_ckpt_path):
+        shutil.rmtree(ebm_ckpt_path)
+    os.makedirs(ebm_ckpt_path, exist_ok=True)
+    if os.path.exists(ebm_plot_path):
+        shutil.rmtree(ebm_plot_path)
+    os.makedirs(ebm_plot_path, exist_ok=True)
+    if os.path.exists(ebm_sample_path):
+        shutil.rmtree(ebm_sample_path)
+    os.makedirs(ebm_sample_path, exist_ok=True)
+
+
+    samples = get_batch_data(db, args, batch_size=10000)
     mean = np.mean(samples, axis=0)
     q_dist = torch.distributions.Bernoulli(probs=torch.from_numpy(mean).to(args.device) * (1. - 2 * 1e-2) + 1e-2)
     net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
@@ -105,7 +126,7 @@ def main_loop(db, args, verbose=False):
         dfs_pbar = tqdm(range(args.dfs_iter_per_epoch)) if verbose else range(args.dfs_iter_per_epoch)
         
         for it in dfs_pbar:
-            x1 = q_dist.sample((args.batch_size,)).long() #remember that there is no data available under the assumptions
+            x1 = q_dist.sample((args.batch_size,)).long().to(args.device) #remember that there is no data available under the assumptions
 
             (B, D), S = x1.size(), args.vocab_size
             t = torch.rand((B,)).to(args.device)
@@ -114,24 +135,24 @@ def main_loop(db, args, verbose=False):
             corrupt_mask = torch.rand((B, D)).to(args.device) < (1 - t[:, None])
             xt[corrupt_mask] = uniform_noise[corrupt_mask]
             
-            loss = compute_loss(ebm_model, dfs_model, q_dist, xt, x1, t, args) #basically fit bfs_model to ebm_model
+            loss = compute_loss(ebm_model, dfs_model, q_dist, xt, x1, t, args) #basically fit dfs_model to ebm_model
             
-            bfs_optimizer.zero_grad()
+            dfs_optimizer.zero_grad()
             loss.backward()
-            bfs_optimizer.step()
+            dfs_optimizer.step()
 
             if verbose:
                 dfs_pbar.set_description(f'Epoch {epoch} Iter {it} DFS Loss {loss.item()}')
 
         if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs - 1):
-            torch.save(bfs_model.state_dict(), f'{ckpt_path}dfs/model_{epoch}.pt')
+            torch.save(dfs_model.state_dict(), f'{dfs_ckpt_path}model_{epoch}.pt')
 
-            samples = gen_samples(bfs_model, args)
+            samples = gen_samples(dfs_model, args)
             if args.vocab_size == 2:
                 float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
             else:
                 float_samples = utils.ourbase2float(samples.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
-            utils.plot_samples(float_samples, f'{sample_path}dfs/sample_{epoch}.png', im_size=4.1, im_fmt='png')
+            utils.plot_samples(float_samples, f'{dfs_sample_path}_sample_{epoch}.png', im_size=4.1, im_fmt='png')
 
         
         #ebm training
@@ -144,30 +165,30 @@ def main_loop(db, args, verbose=False):
             data_samples = get_batch_data(db, args)
             data_samples = torch.from_numpy(np.float32(data_samples)).to(args.device)
             
-            model_samples = gen_samples(dfs_model, args)
+            model_samples = torch.from_numpy(gen_samples(dfs_model, args)).to(args.device)
 
-            data_nrg = model(data_samples)
-            model_nrg = model(model_samples)
+            data_nrg = ebm_model(data_samples)
+            model_nrg = ebm_model(model_samples)
 
             reg_loss = args.cd_alpha * (data_nrg ** 2 + model_nrg ** 2)
             cd_loss = data_nrg - model_nrg
             loss = (reg_loss + cd_loss).logsumexp(dim=-1).mean()
 
-            optimizer.zero_grad()
+            ebm_optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5)
-            optimizer.step()     
+            torch.nn.utils.clip_grad_norm_(ebm_model.parameters(), max_norm=5)
+            ebm_optimizer.step()     
 
             if verbose:
-                pbar.set_description(f'Epoch {epoch} Iter {it} Loss {loss.item()}')
+                ebm_pbar.set_description(f'Epoch {epoch} Iter {it} EBM Loss {loss.item()}')
 
         if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs - 1):
 
-            torch.save(model.state_dict(), f'{ckpt_path}ebm/model_{epoch}.pt')
+            torch.save(ebm_model.state_dict(), f'{ebm_ckpt_path}model_{epoch}.pt')
 
             if args.vocab_size == 2:
-                utils.plot_heat(model, db.f_scale, args.bm, f'{plot_path}ebm/heat_{epoch}.pdf', args)
-                utils.plot_sampler(model, f'{plot_path}ebm/samples_{epoch}.png', args)
+                utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{ebm_plot_path}heat_{epoch}.pdf', args)
+                utils.plot_sampler(ebm_model, f'{ebm_plot_path}samples_{epoch}.png', args)
 
  
         

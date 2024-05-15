@@ -8,6 +8,7 @@ from utils import utils
 from methods.ed_ebm.model import MLPScore, EBM
 from methods.ebm_runidb.model import MLPModel as MLPFlow
 
+
 def gen_samples(model, args):
     model.eval()
     S, D = args.vocab_size, args.discrete_dim

@@ -12,6 +12,7 @@ from methods.ed_ebm.train import main_loop as ed_ebm_main_loop
 from methods.ebm_runidb.train import main_loop as ebm_runidb_main_loop
 
 from methods.cd_ebm.train import main_loop as cd_ebm_main_loop
+from methods.cd_runi_inter.train import main_loop as cd_runi_inter_main_loop
 
 
 def get_args():
