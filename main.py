@@ -74,7 +74,7 @@ def get_args():
             args.device = torch.device('cpu')
             print('use cpu')
 
-    args.save_dir = f'./methods/{args.methods}/experiments/'
+    args.save_dir = f'./methods/{args.methods}/{args.data_name}/experiments/'
     os.makedirs(args.save_dir, exist_ok=True)
 
     return args

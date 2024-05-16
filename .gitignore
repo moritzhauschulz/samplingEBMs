@@ -16,7 +16,7 @@ methods/cd_runi_inter/results/
 methods/ebm_runidb/results_with_delta_0.001/   
 methods/cd_runi_inter/ckpts/ 
 methods/cd_runi_inter/plots/ 
-methods/cd_runi_inter/experiments/
+methods/cd_runi_inter/*/experiments/
 
 #env
 myenv
