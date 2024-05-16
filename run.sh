@@ -19,5 +19,5 @@ python main.py --data_name moons --methods ebm_runidb --gpu 0 --vocab_size 2
 # train contrastive divergence on Binary dataset
 python main.py --data_name moons --methods cd_ebm --gpu 0 --vocab_size 2 --epoch_save 5
 
-# train contrastive divergence on Binary dataset
-python main.py --data_name moons --methods cd_runi_inter --gpu 0 --vocab_size 2 --epoch_save 10 --batch_size 128
+# train EBM by interleaving CD and rate matching
+python main.py --data_name moons --methods cd_runi_inter --gpu 0 --vocab_size 2 --epoch_save 10 --batch_size 128 --delta_t 0.01
