@@ -14,7 +14,7 @@ def gen_samples(model, args):
     S, D = args.vocab_size, args.discrete_dim
 
     t = 0.0
-    dt = 0.001
+    dt = 0.01
     num_samples = 1000
     xt = torch.randint(0, S, (num_samples, D)).to(args.device)
 
