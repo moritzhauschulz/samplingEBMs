@@ -27,7 +27,7 @@ def gen_samples(model, args, batch_size=None):
     S, D = args.vocab_size, args.discrete_dim
 
     t = 0.0
-    dt = 0.001
+    dt = args.delta_t
     if batch_size is None:
         batch_size = args.batch_size
     xt = torch.randint(0, S, (batch_size, D)).to(args.device)
