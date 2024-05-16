@@ -82,6 +82,7 @@ def main_loop(db, args, verbose=False):
 
     if os.path.exists(f'{args.save_dir}.experiment_idx.pkl'):
         with open(f'{args.save_dir}.experiment_idx.pkl', 'rb') as file:
+
             experiment_idx = pickle.load(file)
     else:
         experiment_idx = {}
@@ -98,6 +99,7 @@ def main_loop(db, args, verbose=False):
     dfs_ckpt_path = f'{args.save_dir}/{str(idx)}/ckpts/dfs/{args.data_name}/'
     dfs_plot_path = f'{args.save_dir}/{str(idx)}/plots/dfs/{args.data_name}/'
     dfs_sample_path = f'{args.save_dir}/{str(idx)}/samples/dfs'
+
     if os.path.exists(dfs_ckpt_path):
         shutil.rmtree(dfs_ckpt_path)
     os.makedirs(dfs_ckpt_path, exist_ok=True)
@@ -111,6 +113,7 @@ def main_loop(db, args, verbose=False):
     ebm_ckpt_path = f'{args.save_dir}/{str(idx)}/ckpts/ebm/{args.data_name}/'
     ebm_plot_path = f'{args.save_dir}/{str(idx)}/plots/ebm/{args.data_name}/'
     ebm_sample_path = f'{args.save_dir}/{str(idx)}/ebm/samples'
+
     if os.path.exists(ebm_ckpt_path):
         shutil.rmtree(ebm_ckpt_path)
     os.makedirs(ebm_ckpt_path, exist_ok=True)
