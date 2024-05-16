@@ -12,7 +12,8 @@ methods/ebm_runidb/results/
 methods/cd_ebm/results/       
 methods/cd_ebm/ckpts/ 
 methods/cd_ebm/plots/ 
-methods/cd_runi_inter/results/       
+methods/cd_runi_inter/results/
+methods/ebm_runidb/results_with_delta_0.001/   
 methods/cd_runi_inter/ckpts/ 
 methods/cd_runi_inter/plots/ 
 
