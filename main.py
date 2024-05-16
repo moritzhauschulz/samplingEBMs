@@ -44,6 +44,9 @@ def get_args():
     parser.add_argument('--dfs_iter_per_epoch', default=100, type=int, help='dfs: num iterations per epoch')
     parser.add_argument('--ebm_iter_per_epoch', default=100, type=int, help='ebm: num iterations per epoch')
     parser.add_argument('--epoch_save', default=100, type=int, help='num epochs between save')
+    parser.add_argument('--experiment_name', default="", type=str, help='unique experiment name for meta data')
+
+
 
     args = parser.parse_args()
 
@@ -94,6 +97,7 @@ def plot_categorical_data_samples(db, args):
 
 if __name__ == '__main__':
     args = get_args()
+
     if args.vocab_size == 2:
         args.discrete_dim = 32
         db, bm, inv_bm = utils.setup_data(args)

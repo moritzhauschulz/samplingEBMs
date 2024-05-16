@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 import torch.distributions as dists
 from torch.distributions.categorical import Categorical
+import pickle
 
 from utils import utils
 from methods.cd_runi_inter.model import MLPScore, EBM
@@ -79,9 +80,25 @@ def compute_loss(ebm_model, dfs_model, q_dist, xt, x1, t, args):
 
 def main_loop(db, args, verbose=False):
 
-    dfs_ckpt_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/ckpts/dfs/{args.data_name}/'
-    dfs_plot_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/plots/dfs/{args.data_name}/'
-    dfs_sample_path = f'{args.save_dir}/dfs/samples'
+    experiment_idx_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/experiments/'
+    os.makedirs(experiment_idx_path, exist_ok=True)
+    if os.path.exists(f'{experiment_idx_path}.experiment_idx.pkl.pkl'):
+        with open(f'{experiment_idx_path}.experiment_idx.pkl.pkl', 'rb') as file:
+            experiment_idx = pickle.load(file)
+    else:
+        experiment_idx = {}
+    idx = 0
+    while True:
+        if idx in experiment_idx.keys:
+            idx += 1
+        else: 
+            experiment_idx[idx] = args
+    with open(f'{experiment_idx_path}.experiment_idx.pkl.pkl', 'wb') as file:
+        pickle.dump(experiment_idx, file)
+
+    dfs_ckpt_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/experiments/{str(idx)}/ckpts/dfs/{args.data_name}/'
+    dfs_plot_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/experiments/{str(idx)}/plots/dfs/{args.data_name}/'
+    dfs_sample_path = f'{args.save_dir}/experiments/{str(idx)}/samples/dfs'
     if os.path.exists(dfs_ckpt_path):
         shutil.rmtree(dfs_ckpt_path)
     os.makedirs(dfs_ckpt_path, exist_ok=True)
@@ -92,9 +109,9 @@ def main_loop(db, args, verbose=False):
         shutil.rmtree(dfs_sample_path)
     os.makedirs(dfs_sample_path, exist_ok=True)
 
-    ebm_ckpt_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/ckpts/ebm/{args.data_name}/'
-    ebm_plot_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/plots/ebm/{args.data_name}/'
-    ebm_sample_path = f'{args.save_dir}/ebm/samples'
+    ebm_ckpt_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/experiments/{str(idx)}/ckpts/ebm/{args.data_name}/'
+    ebm_plot_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/experiments/{str(idx)}/plots/ebm/{args.data_name}/'
+    ebm_sample_path = f'{args.save_dir}/experiment_files/{str(idx)}/ebm/samples'
     if os.path.exists(ebm_ckpt_path):
         shutil.rmtree(ebm_ckpt_path)
     os.makedirs(ebm_ckpt_path, exist_ok=True)
@@ -112,7 +129,9 @@ def main_loop(db, args, verbose=False):
     net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
     
     dfs_model = MLPFlow(args).to(args.device)
-    ebm_model = EBM(net).to(args.device)
+    ebm_model = EBM(net, torch.from_numpy(mean)).to(args.device)
+    utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.save_dir}/heat.pdf', args)
+
     dfs_optimizer = torch.optim.Adam(dfs_model.parameters(), lr=1e-4)
     ebm_optimizer = torch.optim.Adam(ebm_model.parameters(), lr=1e-4)
 
@@ -188,7 +207,7 @@ def main_loop(db, args, verbose=False):
 
             if args.vocab_size == 2:
                 utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{ebm_plot_path}heat_{epoch}.pdf', args)
-                utils.plot_sampler(ebm_model, f'{ebm_plot_path}samples_{epoch}.png', args)
+                utils.plot_sampler(ebm_model, f'{ebm_sample_path}samples_{epoch}.png', args)
 
  
         
