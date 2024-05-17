@@ -8,4 +8,6 @@ This repo contains three different method
 
 To understand the training loss, you can refer to the Appendix F.2. in the discrete flow matching paper.
 
-see `run.sh` to run the code with given command lines for different settings.
+See `run.sh` to run the code with given command lines for different settings.
+
+Note: Training can be sped up by running the commands in different terminals. However, ebm_runidb requires the output from ed_ebm.

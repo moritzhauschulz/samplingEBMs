@@ -2,6 +2,7 @@ import os
 import torch
 import shutil
 import argparse
+import json
 import numpy as np
 
 from utils import utils
@@ -14,6 +15,15 @@ from methods.ebm_runidb.train import main_loop as ebm_runidb_main_loop
 from methods.cd_ebm.train import main_loop as cd_ebm_main_loop
 from methods.cd_runi_inter.train import main_loop as cd_runi_inter_main_loop
 
+def convert_namespace_to_dict(args):
+    args_dict = vars(args).copy()  # Convert Namespace to dictionary
+    # Handle non-serializable objects
+    for key, value in args_dict.items():
+        if isinstance(value, torch.device):
+            args_dict[key] = str(value)
+    args_dict.pop('bm', None)
+    args_dict.pop('inv_bm', None)
+    return args_dict
 
 def get_args():
     parser = argparse.ArgumentParser(description='Pipeline')
@@ -74,8 +84,51 @@ def get_args():
             args.device = torch.device('cpu')
             print('use cpu')
 
-    args.save_dir = f'./methods/{args.methods}/{args.data_name}/experiments/'
+    #set paths
+    args.save_dir = f'./methods/{args.methods}/experiments/{args.data_name}/'
     os.makedirs(args.save_dir, exist_ok=True)
+
+    experiment_idx_path = f'{args.save_dir}/experiment_idx.json'
+    if os.path.exists(experiment_idx_path) and os.path.getsize(experiment_idx_path) > 0:
+        try:
+            with open(experiment_idx_path, 'r') as file:
+                experiment_idx = json.load(file)
+        except json.JSONDecodeError:
+            print("Warning: JSON file is corrupted. Initializing a new experiment index.")
+            experiment_idx = {}
+    else:
+        experiment_idx = {}
+    
+    args.idx = 0
+    while True:
+        if str(args.idx) in experiment_idx.keys():
+            args.idx += 1
+        else:
+            break
+    
+    args.ckpt_path = f'{args.save_dir}/{args.data_name}_{str(args.idx)}/ckpts/'
+    args.plot_path = f'{args.save_dir}/{args.data_name}_{str(args.idx)}/plots/'
+    args.sample_path = f'{args.save_dir}/{args.data_name}_{str(args.idx)}/samples/'
+
+    if os.path.exists(args.ckpt_path):
+        print(f'removed checkpoint data that was not indexed')
+        shutil.rmtree(args.ckpt_path)
+    os.makedirs(args.ckpt_path, exist_ok=True)
+    if os.path.exists(args.plot_path):
+        print(f'removed plot data that was not indexed')
+        shutil.rmtree(args.plot_path)
+    os.makedirs(args.plot_path, exist_ok=True)
+    if os.path.exists(args.sample_path):
+        print(f'removed sample data that was not indexed')
+        shutil.rmtree(args.sample_path)
+    os.makedirs(args.sample_path, exist_ok=True)
+
+    # Save the updated experiment index to the file
+    experiment_idx[args.idx] = convert_namespace_to_dict(args)
+    with open(experiment_idx_path, 'w') as file:
+        json.dump(experiment_idx, file, indent=4)
+
+    print(f"Experiment meta data saved to {args.save_dir}experiment_idx.json")
 
     return args
 

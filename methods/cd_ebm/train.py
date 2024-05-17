@@ -22,7 +22,7 @@ def get_batch_data(db, args, batch_size=None):
         bx = utils.ourfloat2base(bx, args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
     return bx
 
-#class CustomGibbsSampler:
+class CustomGibbsSampler:
 
     def __init__(self, db, args, sample_size, max_len=8192):
         """
@@ -80,18 +80,6 @@ def get_batch_data(db, args, batch_size=None):
 
 def main_loop(db, args, verbose=False):
 
-    ckpt_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/ckpts/{args.data_name}/'
-    plot_path = f'{os.path.abspath(os.path.join(os.path.dirname(__file__)))}/plots/{args.data_name}/'
-    sample_path = f'{args.save_dir}/samples/'
-    if os.path.exists(ckpt_path):
-        shutil.rmtree(ckpt_path)
-    os.makedirs(ckpt_path, exist_ok=True)
-    if os.path.exists(plot_path):
-        shutil.rmtree(plot_path)
-    os.makedirs(plot_path, exist_ok=True)
-    if os.path.exists(sample_path):
-        os.makedirs(sample_path, exist_ok=True)
-
     #uncomment to use custom gibbs sampler
     #sampler = Sampler(db, args, sample_size=1000)
     
@@ -131,11 +119,11 @@ def main_loop(db, args, verbose=False):
 
         if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs - 1):
 
-            torch.save(model.state_dict(), f'{ckpt_path}/model_{epoch}.pt')
+            torch.save(model.state_dict(), f'{args.ckpt_path}/model_{epoch}.pt')
 
             if args.vocab_size == 2:
-                utils.plot_heat(model, db.f_scale, args.bm, f'{plot_path}/heat_{epoch}.pdf', args)
-                utils.plot_sampler(model, f'{plot_path}/samples_{epoch}.png', args)
+                utils.plot_heat(model, db.f_scale, args.bm, f'{args.plot_path}/heat_{epoch}.pdf', args)
+                utils.plot_sampler(model, f'{args.sample_path}/samples_{epoch}.png', args)
 
  
         

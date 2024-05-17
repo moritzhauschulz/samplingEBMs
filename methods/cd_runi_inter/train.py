@@ -79,81 +79,7 @@ def compute_loss(ebm_model, dfs_model, q_dist, xt, x1, t, args):
     
     return loss
 
-def convert_namespace_to_dict(args):
-    args_dict = vars(args).copy()  # Convert Namespace to dictionary
-    # Handle non-serializable objects
-    for key, value in args_dict.items():
-        if isinstance(value, torch.device):
-            args_dict[key] = str(value)
-    args_dict.pop('bm', None)
-    args_dict.pop('inv_bm', None)
-    return args_dict
-
 def main_loop(db, args, verbose=False):
-
-    # Check if the experiment index file exists and is not empty
-    experiment_idx_path = f'{args.save_dir}/experiment_idx.json'
-    if os.path.exists(experiment_idx_path) and os.path.getsize(experiment_idx_path) > 0:
-        try:
-            # Load the existing experiment index from the file
-            with open(experiment_idx_path, 'r') as file:
-                experiment_idx = json.load(file)
-        except json.JSONDecodeError:
-            # Handle the case where the file is corrupted or not a valid JSON
-            print("Warning: JSON file is corrupted. Initializing a new experiment index.")
-            experiment_idx = {}
-    else:
-        # Initialize an empty dictionary if the file does not exist or is empty
-        experiment_idx = {}
-
-    # Find the next available index
-    idx = 0
-    while True:
-        if idx in experiment_idx.keys():
-            idx += 1
-        else:
-            experiment_idx[idx] = convert_namespace_to_dict(args)
-            break
-
-    # Ensure the save directory exists
-    os.makedirs(args.save_dir, exist_ok=True)
-
-    # Save the updated experiment index to the file
-    with open(experiment_idx_path, 'w') as file:
-        json.dump(experiment_idx, file, indent=4)
-
-    print(f"Experiment meta data saved to {args.save_dir}/experiment_idx.json")
-
-
-
-    dfs_ckpt_path = f'{args.save_dir}/{str(idx)}/ckpts/dfs/'
-    dfs_plot_path = f'{args.save_dir}/{str(idx)}/plots/dfs/'
-    dfs_sample_path = f'{args.save_dir}/{str(idx)}/samples/dfs/'
-
-    if os.path.exists(dfs_ckpt_path):
-        shutil.rmtree(dfs_ckpt_path)
-    os.makedirs(dfs_ckpt_path, exist_ok=True)
-    if os.path.exists(dfs_plot_path):
-        shutil.rmtree(dfs_plot_path)
-    os.makedirs(dfs_plot_path, exist_ok=True)
-    if os.path.exists(dfs_sample_path):
-        shutil.rmtree(dfs_sample_path)
-    os.makedirs(dfs_sample_path, exist_ok=True)
-
-    ebm_ckpt_path = f'{args.save_dir}/{str(idx)}/ckpts/ebm/'
-    ebm_plot_path = f'{args.save_dir}/{str(idx)}/plots/ebm/'
-    ebm_sample_path = f'{args.save_dir}/{str(idx)}/samples/ebm/'
-
-    if os.path.exists(ebm_ckpt_path):
-        shutil.rmtree(ebm_ckpt_path)
-    os.makedirs(ebm_ckpt_path, exist_ok=True)
-    if os.path.exists(ebm_plot_path):
-        shutil.rmtree(ebm_plot_path)
-    os.makedirs(ebm_plot_path, exist_ok=True)
-    if os.path.exists(ebm_sample_path):
-        shutil.rmtree(ebm_sample_path)
-    os.makedirs(ebm_sample_path, exist_ok=True)
-
 
     samples = get_batch_data(db, args, batch_size=10000)
     mean = np.mean(samples, axis=0)
@@ -197,14 +123,14 @@ def main_loop(db, args, verbose=False):
                 dfs_pbar.set_description(f'Epoch {epoch} Iter {it} DFS Loss {loss.item()}')
 
         if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs - 1):
-            torch.save(dfs_model.state_dict(), f'{dfs_ckpt_path}model_{epoch}.pt')
+            torch.save(dfs_model.state_dict(), f'{args.ckpt_path}afs_model_{epoch}.pt')
 
             samples = gen_samples(dfs_model, args)
             if args.vocab_size == 2:
                 float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
             else:
                 float_samples = utils.ourbase2float(samples.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
-            utils.plot_samples(float_samples, f'{dfs_sample_path}sample_{epoch}.png', im_size=4.1, im_fmt='png')
+            utils.plot_samples(float_samples, f'{args.sample_path}dfs_sample_{epoch}.png', im_size=4.1, im_fmt='png')
 
         
         #ebm training
@@ -236,11 +162,11 @@ def main_loop(db, args, verbose=False):
 
         if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs - 1):
 
-            torch.save(ebm_model.state_dict(), f'{ebm_ckpt_path}model_{epoch}.pt')
+            torch.save(ebm_model.state_dict(), f'{args.ckpt_path}ebm_model_{epoch}.pt')
 
             if args.vocab_size == 2:
-                utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{ebm_plot_path}heat_{epoch}.pdf', args)
-                utils.plot_sampler(ebm_model, f'{ebm_sample_path}samples_{epoch}.png', args)
+                utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}ebm_heat_{epoch}.pdf', args)
+                utils.plot_sampler(ebm_model, f'{args.sample_path}ebm_samples_{epoch}.png', args)
 
  
         

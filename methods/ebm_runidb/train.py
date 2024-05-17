@@ -1,5 +1,6 @@
 import os
 import torch
+import sys
 import numpy as np
 from tqdm import tqdm
 from torch.distributions.categorical import Categorical
@@ -83,7 +84,11 @@ def main_loop(db, args, verbose=False):
 
     net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
     ebm_model = EBM(net, torch.from_numpy(mean)).to(args.device)
-    ebm_model.load_state_dict(torch.load(f'methods/ed_ebm/ckpts/{args.data_name}/model_999.pt', map_location=args.device))
+    try:
+        ebm_model.load_state_dict(torch.load(f'methods/ed_ebm/ckpts/{args.data_name}/model_999.pt', map_location=args.device))
+    except FileNotFoundError as e:
+        print('Training rate matching on EBM requires a trained EBM model. Run "python main.py --data_name moons --methods ed_ebm --gpu 0 --vocab_size 2" and try again.')
+        sys.exit(1)
     ebm_model.eval()
     utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.save_dir}/heat.pdf', args)
 
@@ -119,18 +124,13 @@ def main_loop(db, args, verbose=False):
                 pbar.set_description(f'Epoch {epoch} Iter {it} Loss {loss.item()}')
 
         if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs - 1):
-        # if True:
-            ckpt_path = f'{args.save_dir}/ckpts'
-            os.makedirs(ckpt_path, exist_ok=True)
-            torch.save(flow_model.state_dict(), f'{ckpt_path}/model_{epoch}.pt')
+            torch.save(flow_model.state_dict(), f'{args.ckpt_path}/model_{epoch}.pt')
 
-            sample_path = f'{args.save_dir}/samples'
-            os.makedirs(sample_path, exist_ok=True)
             samples = gen_samples(flow_model, args)
             if args.vocab_size == 2:
                 float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
             else:
                 float_samples = utils.ourbase2float(samples.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
-            utils.plot_samples(float_samples, f'{sample_path}/sample_{epoch}.png', im_size=4.1, im_fmt='png')
+            utils.plot_samples(float_samples, f'{args.sample_path}/sample_{epoch}.png', im_size=4.1, im_fmt='png')
 
 
