@@ -156,7 +156,7 @@ def main_loop(db, args, verbose=False):
 
 
     samples = get_batch_data(db, args, batch_size=10000)
-    #mean = np.mean(samples, axis=0)
+    mean = np.mean(samples, axis=0)
     q_dist = torch.distributions.Bernoulli(probs=torch.from_numpy(mean).to(args.device) * (1. - 2 * 1e-2) + 1e-2)
     net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
     
