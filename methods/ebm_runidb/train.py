@@ -83,9 +83,11 @@ def main_loop(db, args, verbose=False):
     q_dist = torch.distributions.Bernoulli(probs=torch.from_numpy(mean).to(args.device) * (1. - 2 * 1e-2) + 1e-2)
 
     net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
-    ebm_model = EBM(net, torch.from_numpy(mean)).to(args.device)
+    #ebm_model = EBM(net, torch.from_numpy(mean)).to(args.device)
+    ebm_model = EBM(net).to(args.device)
+    idx = input("Please enter the experiment number for the energy discrepancy ebm to use (e.g. 0): ")
     try:
-        ebm_model.load_state_dict(torch.load(f'methods/ed_ebm/ckpts/{args.data_name}/model_999.pt', map_location=args.device))
+        ebm_model.load_state_dict(torch.load(f'methods/ed_ebm/experiments/{args.data_name}/{args.data_name}_{str(idx)}/ckpts/model_999.pt', map_location=args.device))
     except FileNotFoundError as e:
         print('Training rate matching on EBM requires a trained EBM model. Run "python main.py --data_name moons --methods ed_ebm --gpu 0 --vocab_size 2" and try again.')
         sys.exit(1)
