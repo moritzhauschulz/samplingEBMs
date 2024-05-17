@@ -156,12 +156,13 @@ def main_loop(db, args, verbose=False):
 
 
     samples = get_batch_data(db, args, batch_size=10000)
-    mean = np.mean(samples, axis=0)
+    #mean = np.mean(samples, axis=0)
     q_dist = torch.distributions.Bernoulli(probs=torch.from_numpy(mean).to(args.device) * (1. - 2 * 1e-2) + 1e-2)
     net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
     
     dfs_model = MLPFlow(args).to(args.device)
-    ebm_model = EBM(net, torch.from_numpy(mean)).to(args.device)
+    #ebm_model = EBM(net, torch.from_numpy(mean)).to(args.device)
+    ebm_model = EBM(net).to(args.device)
     utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.save_dir}/heat.pdf', args)
 
     dfs_optimizer = torch.optim.Adam(dfs_model.parameters(), lr=1e-4)
