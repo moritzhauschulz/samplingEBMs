@@ -125,7 +125,7 @@ def main_loop(db, args, verbose=False):
         if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs - 1):
             torch.save(dfs_model.state_dict(), f'{args.ckpt_path}afs_model_{epoch}.pt')
 
-            samples = gen_samples(dfs_model, args)
+            samples = gen_samples(dfs_model, args, batch_size=args.batch_size * 10)
             if args.vocab_size == 2:
                 float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
             else:

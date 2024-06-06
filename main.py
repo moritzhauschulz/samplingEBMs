@@ -36,7 +36,6 @@ def get_args():
         ],
     )
 
-
     parser.add_argument('--data_name', type=str, default='moons')
     parser.add_argument('--discrete_dim', type=int, default=16)
     parser.add_argument('--vocab_size', type=int, default=5)
@@ -55,8 +54,6 @@ def get_args():
     parser.add_argument('--ebm_iter_per_epoch', default=100, type=int, help='ebm: num iterations per epoch')
     parser.add_argument('--epoch_save', default=100, type=int, help='num epochs between save')
     parser.add_argument('--experiment_name', default="", type=str, help='unique experiment name for meta data')
-
-
 
     args = parser.parse_args()
 
