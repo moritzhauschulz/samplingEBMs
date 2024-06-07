@@ -23,6 +23,10 @@ methods/ebm_runidb/experiments/
 methods/ed_ebm/experiments/
 methods/punidb/experiments/
 methods/runidb/experiments/
+EB_GFN_full_repo/__pycache__/
+EB_GFN_full_repo/synthetic/__pycache__
+EB_GFN_full_repo/synthetic/test
+methods/eb_gfn/experiments/
 
 #env
 myenv

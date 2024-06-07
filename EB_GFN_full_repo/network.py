@@ -32,24 +32,3 @@ def mlp_ebm(nin, nint=256, nout=1):
         Swish(),
         nn.Linear(nint, nout),
     )
-
-
-
-class EnergyModel(T.nn.Module):
-
-    def __init__(self, s, mid_size):
-        super(EnergyModel, self).__init__()
-
-        self.m = T.nn.Sequential(T.nn.Linear(s, mid_size),
-                                 T.nn.ELU(),
-                                 T.nn.Linear(mid_size, mid_size),
-                                 T.nn.ELU(),
-                                 T.nn.Linear(mid_size, mid_size),
-                                 T.nn.ELU(),
-                                 T.nn.Linear(mid_size, 1))
-
-    def forward(self, x):
-        x = x.view((x.shape[0], -1))
-        x = self.m(x)
-
-        return x[:, -1]

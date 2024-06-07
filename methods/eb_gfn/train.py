@@ -10,12 +10,31 @@ import ipdb, pdb
 from tqdm import tqdm
 import argparse
 
-from model import get_GFlowNet
+from methods.eb_gfn.model import get_GFlowNet
+from methods.eb_gfn.model  import MLPScore, EBM
+
+from utils import utils
+from utils import sampler
+
+from synthetic_utils import plot_heat, plot_samples,\
+    float2bin, bin2float, get_binmap, get_true_samples, get_ebm_samples, EnergyModel
+from synthetic_data import inf_train_gen, OnlineToyDataset
+
 
 # sys.path.append("/home/zhangdh/EB_GFN/synthetic")
 # from synthetic_utils import plot_heat, plot_samples,\
 #     float2bin, bin2float, get_binmap, get_true_samples, get_ebm_samples, EnergyModel
 # from synthetic_data import inf_train_gen, OnlineToyDataset
+
+def get_batch_data(db, args, batch_size=None):
+    if batch_size is None:
+        batch_size = args.batch_size
+    bx = db.gen_batch(batch_size)
+    if args.vocab_size == 2:
+        bx = utils.float2bin(bx, args.bm, args.discrete_dim, args.int_scale)
+    else:
+        bx = utils.ourfloat2base(bx, args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
+    return bx
 
 
 def makedirs(path):
@@ -27,63 +46,13 @@ def makedirs(path):
 
 
 unif_dist = torch.distributions.Bernoulli(probs=0.5)
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--device", "--d", default=0, type=int)
-    # data
-    parser.add_argument('--save_dir', type=str, default="./")
-    parser.add_argument('--data', type=str, default='circles')  # 2spirals 8gaussians pinwheel circles moons swissroll checkerboard
 
-    # training
-    parser.add_argument('--n_iters', "--ni", type=lambda x: int(float(x)), default=1e5)
-    parser.add_argument('--batch_size', "--bs", type=int, default=128)
-    parser.add_argument('--print_every', "--pe", type=int, default=100)
-    parser.add_argument('--eval_every', type=int, default=2000)
-    parser.add_argument('--lr', type=float, default=.0001)
-    parser.add_argument("--ebm_every", "--ee", type=int, default=1, help="EBM training frequency")
+def main_loop(db, args):
 
-    # for GFN
-    parser.add_argument("--type", type=str)
-    parser.add_argument("--hid", type=int, default=512)
-    parser.add_argument("--hid_layers", "--hl", type=int, default=3)
-    parser.add_argument("--leaky", type=int, default=1, choices=[0, 1])
-    parser.add_argument("--gfn_bn", "--gbn", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--init_zero", "--iz", type=int, default=0, choices=[0, 1], )
-    parser.add_argument("--gmodel", "--gm", type=str,default="mlp")
-    parser.add_argument("--train_steps", "--ts", type=int, default=1)
-    parser.add_argument("--l1loss", "--l1l", type=int, default=0, choices=[0, 1], help="use soft l1 loss instead of l2")
-
-    parser.add_argument("--with_mh", "--wm", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--rand_k", "--rk", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--lin_k", "--lk", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--warmup_k", "--wk", type=lambda x: int(float(x)), default=0, help="need to use w/ lin_k")
-    parser.add_argument("--K", type=int, default=-1, help="for gfn back forth negative sample generation")
-
-    parser.add_argument("--rand_coef", "--rc", type=float, default=0, help="for tb")
-    parser.add_argument("--back_ratio", "--br", type=float, default=0.)
-    parser.add_argument("--clip", type=float, default=-1., help="for gfn's linf gradient clipping")
-    parser.add_argument("--temp", type=float, default=1)
-    parser.add_argument("--opt", type=str, default="adam", choices=["adam", "sgd"])
-    parser.add_argument("--glr", type=float, default=1e-3)
-    parser.add_argument("--zlr", type=float, default=1)
-    parser.add_argument("--momentum", "--mom", type=float, default=0.0)
-    parser.add_argument("--gfn_weight_decay", "--gwd", type=float, default=0.0)
-    args = parser.parse_args()
-
-    os.environ['CUDA_VISIBLE_DEVICES'] = "{:}".format(args.device)
-    device = torch.device("cpu") if args.device < 0 else torch.device("cuda")
-
-    args.save_dir = os.path.join(args.save_dir, "test")
-    makedirs(args.save_dir)
-
-    print("Device:" + str(device))
-    print("Args:" + str(args))
+    assert args.vocab_size == 2, 'GFlowNet is only specified for binary data'
+    assert args.discrete_dim == 32, 'GFlowNet is only specified for 32 dimensions'
 
     ############## Data
-    discrete_dim = 32
-    bm, inv_bm = get_binmap(discrete_dim, 'gray')
-
-    db = OnlineToyDataset(args.data, discrete_dim)
     if not hasattr(args, "int_scale"):
         int_scale = db.int_scale
     else:
@@ -97,20 +66,20 @@ if __name__ == "__main__":
 
     batch_size = args.batch_size
     multiples = {'pinwheel': 5, '2spirals': 2}
-    batch_size = batch_size - batch_size % multiples.get(args.data, 1)
+    batch_size = batch_size - batch_size % multiples.get(args.data_name, 1)
 
     ############## EBM model
     net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
     energy_model = EBM(net).to(args.device)
     utils.plot_heat(energy_model, db.f_scale, args.bm, f'{args.save_dir}/heat.pdf', args)
-    optimizer = torch.optim.Adam(ebm_model.parameters(), lr=1e-4)
+    optimizer = torch.optim.Adam(energy_model.parameters(), lr=1e-4)
 
     ############## GFN
-    xdim = discrete_dim
+    xdim = args.discrete_dim
     assert args.gmodel == "mlp"
-    gfn = get_GFlowNet(args.type, xdim, args, device)
+    gfn = get_GFlowNet(args.type, xdim, args, args.device)
 
-    energy_model.to(device)
+    energy_model.to(args.device)
     print("model: {:}".format(energy_model))
 
     itr = 0
@@ -120,7 +89,9 @@ if __name__ == "__main__":
     while itr < args.n_iters:
         st = time.time()
 
-        x = get_true_samples(db, batch_size, bm, int_scale, discrete_dim).to(device)
+        x = get_batch_data(db, args)
+        x = torch.from_numpy(np.float32(x)).to(args.device)
+        # x = get_true_samples(db, batch_size, bm, int_scale, args.discrete_dim).to(args.device)
 
         update_success_rate = -1.
         gfn.model.train()
@@ -177,14 +148,18 @@ if __name__ == "__main__":
 
 
         if (itr + 1) % args.eval_every == 0:
-            # heat map of energy
-            plot_heat(energy_model, bm, plot_size, device, int_scale, discrete_dim,
-                      out_file=os.path.join(args.save_dir, f'heat_{itr}.pdf'))
+            if args.vocab_size == 2:
+                utils.plot_heat(energy_model, db.f_scale, args.bm, f'{args.plot_path}ebm_heat_{itr}.pdf', args)
+                utils.plot_sampler(energy_model, f'{args.sample_path}ebm_samples_{itr}.png', args)
 
-            # samples of gfn
-            gfn_samples = gfn.sample(4000).detach()
-            gfn_samp_float = bin2float(gfn_samples.data.cpu().numpy().astype(int), inv_bm, int_scale, discrete_dim)
-            plot_samples(gfn_samp_float, os.path.join(args.save_dir, f'gfn_samples_{itr}.pdf'), lim=plot_size)
+            # # heat map of energy
+            # plot_heat(energy_model, bm, plot_size, args.device, int_scale, arg.discrete_dim,
+            #           out_file=os.path.join(args.plot_path, f'heat_{itr}.pdf'))
+
+            # # samples of gfn
+            # gfn_samples = gfn.sample(4000).detach()
+            # gfn_samp_float = bin2float(gfn_samples.data.cpu().numpy().astype(int), inv_bm, int_scale, args.discrete_dim)
+            # plot_samples(gfn_samp_float, os.path.join(args.sample_path, f'gfn_samples_{itr}.pdf'), lim=plot_size)
 
             # GFN LL
             gfn.model.eval()
@@ -192,7 +167,10 @@ if __name__ == "__main__":
             pbar = tqdm(range(10))
             pbar.set_description("GFN Calculating likelihood")
             for _ in pbar:
-                pos_samples_bs = get_true_samples(db, 1000, bm, int_scale, discrete_dim).to(device)
+                pos_samples_bs = get_batch_data(db, args, batch_size=1000)
+                pos_samples_bs = torch.from_numpy(np.float32(pos_samples_bs)).to(args.device)
+
+                # pos_samples_bs = get_true_samples(db, 1000, bm, int_scale, args.discrete_dim).to(args.device)
                 logp = gfn.cal_logp(pos_samples_bs, 20)
                 logps.append(logp.reshape(-1))
                 pbar.set_postfix({"logp": f"{torch.cat(logps).mean().item():.2f}"})

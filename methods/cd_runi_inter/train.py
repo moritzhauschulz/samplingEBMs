@@ -101,7 +101,7 @@ def main_loop(db, args, verbose=False):
         dfs_model.train()
         ebm_model.eval()
 
-        dfs_pbar = tqdm(range(args.dfs_iter_per_epoch)) if verbose else range(args.dfs_iter_per_epoch)
+        dfs_pbar = tqdm(range(args.surrogate_iter_per_epoch)) if verbose else range(args.surrogate_iter_per_epoch)
         
         for it in dfs_pbar:
             x1 = q_dist.sample((args.batch_size,)).long().to(args.device) #remember that there is no data available under the assumptions
