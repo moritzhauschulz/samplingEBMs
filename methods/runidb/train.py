@@ -8,13 +8,12 @@ from torch.distributions.categorical import Categorical
 from utils import utils
 from methods.runidb.model import MLPModel
 
-def gen_samples(model, args):
+def gen_samples(model, args, num_samples=1000):
     model.eval()
     S, D = args.vocab_size, args.discrete_dim
 
     t = 0.0
     dt = args.delta_t
-    num_samples = 1000
     xt = torch.randint(0, S, (num_samples, D)).to(args.device)
 
     while t < 1.0:

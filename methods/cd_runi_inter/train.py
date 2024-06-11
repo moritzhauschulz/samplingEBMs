@@ -13,17 +13,10 @@ from utils import utils
 from methods.cd_runi_inter.model import MLPScore, EBM
 from methods.cd_runi_inter.model import MLPModel as MLPFlow
 from utils import sampler
-from utils.utils import ebm_evaluation
-
-def get_batch_data(db, args, batch_size=None):
-    if batch_size is None:
-        batch_size = args.batch_size
-    bx = db.gen_batch(batch_size)
-    if args.vocab_size == 2:
-        bx = utils.float2bin(bx, args.bm, args.discrete_dim, args.int_scale)
-    else:
-        bx = utils.ourfloat2base(bx, args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
-    return bx
+from utils.eval import ebm_evaluation
+from utils.eval import sampler_evaluation
+from utils.eval import sampler_ebm_evaluation
+from utils.utils import get_batch_data
 
 def gen_samples(model, args, batch_size=None):
     model.eval()
@@ -90,12 +83,13 @@ def main_loop(db, args, verbose=False):
     dfs_model = MLPFlow(args).to(args.device)
     #ebm_model = EBM(net, torch.from_numpy(mean)).to(args.device)
     ebm_model = EBM(net).to(args.device)
-    utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}/initial_heat.pdf', args)
+    utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}/initial_heat.png', args)
 
     dfs_optimizer = torch.optim.Adam(dfs_model.parameters(), lr=1e-4)
     ebm_optimizer = torch.optim.Adam(ebm_model.parameters(), lr=1e-4)
 
-    for epoch in range(1,args.num_epochs + 1):
+    pbar = tqdm(range(1,args.num_epochs + 1))
+    for epoch in pbar:
 
         #dfs training
 
@@ -166,12 +160,17 @@ def main_loop(db, args, verbose=False):
             torch.save(ebm_model.state_dict(), f'{args.ckpt_path}ebm_model_{epoch}.pt')
 
             if args.vocab_size == 2:
-                utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}ebm_heat_{epoch}.pdf', args)
+                utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}ebm_heat_{epoch}.png', args)
                 utils.plot_sampler(ebm_model, f'{args.sample_path}ebm_samples_{epoch}.png', args)
+
+        pbar.set_description(f'Epoch {epoch}')
 
     if args.evaluate:
         ebm_model.eval()
-        ebm_evaluation(args, db, ebm_model, batch_size=1000, ais_samples=1000)
+        ebm_evaluation(args, db, ebm_model, batch_size=4000, ais_samples=1000000, ais_num_intermediate=100) #ais_num_intermediate should maybe be 1000
+        sampler_evaluation(args, db, lambda x: torch.from_numpy(gen_samples(dfs_model, args, batch_size=x)))
+        sampler_ebm_evaluation(args, db, lambda x: torch.from_numpy(gen_samples(dfs_model, args, batch_size=x)), ebm_model)
+
 
  
         

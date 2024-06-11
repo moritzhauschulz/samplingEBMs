@@ -15,7 +15,10 @@ from methods.eb_gfn.model  import MLPScore, EBM
 
 from utils import utils
 from utils import sampler
-from utils import get_batch_data
+from utils.eval import ebm_evaluation
+from utils.eval import sampler_evaluation
+from utils.eval import sampler_ebm_evaluation
+from utils.utils import get_batch_data
 
 
 def makedirs(path):
@@ -152,5 +155,14 @@ def main_loop(db, args):
 
 
         itr += 1
-        if itr > args.n_iters:
-            quit(0)
+        # if itr > args.n_iters:
+        #     quit(0)
+
+    if args.evaluate:
+        energy_model.eval()
+        ebm_evaluation(args, db, energy_model, batch_size=4000, ais_samples=1000000, ais_num_intermediate=100) #ais_num_intermediate should maybe be 1000
+        sampler_evaluation(args, db, lambda x: gfn.sample(x))
+        sampler_ebm_evaluation(args, db, lambda x: gfn.sample(x), ebm_model)
+
+
+        

@@ -10,6 +10,22 @@ import json
 from utils import toy_data_lib
 from utils.sampler import GibbsSampler
 
+def print_cuda_memory_stats():
+    if torch.cuda.is_available():
+        # Get the total and available memory
+        total_memory = torch.cuda.get_device_properties(0).total_memory
+        reserved_memory = torch.cuda.memory_reserved(0)
+        allocated_memory = torch.cuda.memory_allocated(0)
+        free_memory = reserved_memory - allocated_memory
+
+        print(f"Total memory: {total_memory / 1024**2:.2f} MB")
+        print(f"Reserved memory: {reserved_memory / 1024**2:.2f} MB")
+        print(f"Allocated memory: {allocated_memory / 1024**2:.2f} MB")
+        print(f"Free memory (within reserved): {free_memory / 1024**2:.2f} MB")
+        print(f"Available memory: {(total_memory - reserved_memory + free_memory) / 1024**2:.2f} MB")
+    else:
+        print("CUDA is not available on this system.")
+
 
 def get_batch_data(db, args, batch_size=None):
     if batch_size is None:
@@ -165,110 +181,3 @@ def plot_sampler(score_func, out_file, args):
         samples.append(bin2float(init_samples.data.cpu().numpy(), args.inv_bm, args.discrete_dim, args.int_scale))
     samples = np.concatenate(samples, axis=0)
     plot_samples(samples, out_file, im_size=4.1)
-
-def energy_source(x):
-    return -torch.sum(torch.log((1 - 0.5) ** x * 0.5 ** (1-x)), dim=-1)
-
-def ais_mcmc_step(args, x, energy_fn, step_size=0.1):
-    x_new = torch.bernoulli(torch.full_like(x, 0.5))
-    accept_prob = torch.exp(energy_fn(x) - energy_fn(x_new))
-    accept = torch.rand(x.shape[0]).to(args.device) < accept_prob
-    x[accept] = x_new[accept]
-    return x
-
-def annealed_importance_sampling(args, score_fn, num_samples, num_intermediate, num_mcmc_steps, latent_dim):
-    x = torch.bernoulli(torch.full((num_samples, latent_dim), 0.5)).to(args.device)  # Initial samples from the source distribution
-    betas = np.linspace(0, 1, num_intermediate)
-    
-    log_weights = torch.zeros(num_samples).to(args.device)
-    
-    for i in range(num_intermediate - 1):
-        beta0, beta1 = betas[i], betas[i + 1]
-        
-        def energy_fn(x):
-            energy = (1 - beta0) * energy_source(x) + beta0 * score_fn(x)
-            return energy
-        
-        for _ in range(num_mcmc_steps):
-            x = ais_mcmc_step(args, x, energy_fn)
-        
-        log_weights += (beta1 - beta0) * (score_fn(x).to(args.device) - energy_source(x).to(args.device))
-    
-    max_log_weight = torch.max(log_weights)
-    weights = torch.exp(log_weights - max_log_weight)
-    normalized_weights = weights / torch.sum(weights)
-    
-    log_partition_ratio = max_log_weight + torch.log(torch.sum(weights)) - torch.log(torch.tensor(num_samples, dtype=torch.float32))
-    
-    return log_partition_ratio
-
-def exp_hamming_sim(x, y, bd):
-  torch.cuda.empty_cache()
-  x = x.unsqueeze(1)
-  y = y.unsqueeze(0)
-  d = torch.sum(torch.abs(x - y), dim=-1)
-  return torch.exp(-bd * d)
-
-def exp_hamming_mmd(x, y, bandwidth=0.1):
-  torch.cuda.empty_cache()
-  x = x.float()
-  y = y.float()
-
-  with torch.no_grad():
-      kxx = exp_hamming_sim(x, x, bd=bandwidth)
-      idx = torch.arange(0, x.shape[0], out=torch.LongTensor())
-      kxx[idx, idx] = 0.0
-      kxx = torch.sum(kxx) / x.shape[0] / (x.shape[0] - 1)
-
-      kyy = exp_hamming_sim(y, y, bd=bandwidth)
-      idx = torch.arange(0, y.shape[0], out=torch.LongTensor())
-      kyy[idx, idx] = 0.0
-      kyy = torch.sum(kyy) / y.shape[0] / (y.shape[0] - 1)
-
-      kxy = torch.sum(exp_hamming_sim(x, y, bd=bandwidth)) / x.shape[0] / y.shape[0]
-
-      mmd = kxx + kyy - 2 * kxy
-  return mmd
-
-def ebm_evaluation(args, db, ebm, write_to_index=True, batch_size=4000, ais_samples=1000000, num_ais_mcmc_steps=25, ais_num_intermediate=1000,discrete_dim=32):
-  #NLL
-  Z = torch.exp(annealed_importance_sampling(args, ebm, ais_samples, ais_num_intermediate, num_ais_mcmc_steps, discrete_dim))
-  nll_samples = get_batch_data(db, args, batch_size=batch_size)
-  nll_samples = torch.from_numpy(np.float32(nll_samples)).to(args.device)
-  nll = ebm(nll_samples)
-  nll = torch.sum(nll / Z)
-
-  #MDD
-  mmd_list = []
-  for _ in range(10):
-    gibbs_sampler = GibbsSampler(n_choices = args.vocab_size, discrete_dim=args.discrete_dim, device=args.device)
-    x = gibbs_sampler(ebm, num_rounds=100, num_samples=batch_size).to('cpu')
-    y = get_batch_data(db, args, batch_size=4000)
-    y = torch.from_numpy(np.float32(y)).to('cpu')
-    mmd_list.append(exp_hamming_mmd(x,y))
-  mmd = sum(mmd_list)/10
-
-  print(f'Final NLL on {batch_size} samples with AIS on {ais_samples} samlpes: {nll}; Final exponential Hamming MMD on 10x{batch_size} samples: {mmd}')
-  
-  if write_to_index:
-    experiment_idx_path = f'{args.save_dir}/experiment_idx.json'
-    if os.path.exists(experiment_idx_path) and os.path.getsize(experiment_idx_path) > 0:
-      try:
-          with open(experiment_idx_path, 'r') as file:
-              experiment_idx = json.load(file)
-      except json.JSONDecodeError:
-          print("Warning: JSON file is corrupted. Cannot store evaluation results.")
-      experiment_idx[str(args.idx)]['nll'] = nll.item()
-      experiment_idx[str(args.idx)]['mmd'] = mmd.item()
-      with open(experiment_idx_path, 'w') as file:
-        json.dump(experiment_idx, file, indent=4)
-      print(f'Evaluation results written to index file: {experiment_idx_path}')
-    else:
-      print('Could not write evaluation to index because index file was not found.')
-  
-  return nll, mmd
-
-
-
-  
-  

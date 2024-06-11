@@ -38,7 +38,7 @@ def get_args():
     parser.add_argument('--vocab_size', type=int, default=2)
 
     # training
-    parser.add_argument('--n_iters', "--ni", type=lambda x: int(float(x)), default=1e5)
+    parser.add_argument('--n_iters', "--ni", type=int, default=100000)
     parser.add_argument('--batch_size', "--bs", type=int, default=128)
     parser.add_argument('--print_every', "--pe", type=int, default=100)
     parser.add_argument('--eval_every', type=int, default=2000)
@@ -71,6 +71,9 @@ def get_args():
     parser.add_argument("--zlr", type=float, default=1)
     parser.add_argument("--momentum", "--mom", type=float, default=0.0)
     parser.add_argument("--gfn_weight_decay", "--gwd", type=float, default=0.0)
+    parser.add_argument('--evaluate', default=True, type=bool, help='evaluate final nll and mmd')
+    parser.add_argument('--verbose', default=False, type=bool, help='evaluate final nll and mmd')
+
     args = parser.parse_args()
 
     args = parser.parse_args()

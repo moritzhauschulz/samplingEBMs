@@ -70,7 +70,25 @@ def inf_train_gen(data, rng=None, batch_size=200):
                           np.sin(angles), np.cos(angles)])
     rotations = np.reshape(rotations.T, (-1, 2, 2))
 
-    return 2 * rng.permutation(np.einsum("ti,tij->tj", features, rotations))
+    data = 2 * rng.permutation(np.einsum("ti,tij->tj", features, rotations))
+
+  # Check if more samples are needed to reach the batch size
+    if data.shape[0] < batch_size:
+        additional_samples_needed = batch_size - data.shape[0]
+        
+        additional_features = rng.randn(additional_samples_needed, 2) * np.array([radial_std, tangential_std])
+        additional_features[:, 0] += 1.
+        additional_labels = rng.choice(np.arange(num_classes), additional_samples_needed, replace=True)
+        
+        additional_angles = rads[additional_labels] + rate * np.exp(additional_features[:, 0])
+        additional_rotations = np.stack([np.cos(additional_angles), -np.sin(additional_angles), np.sin(additional_angles), np.cos(additional_angles)])
+        additional_rotations = np.reshape(additional_rotations.T, (-1, 2, 2))
+        
+        additional_data = 2 * np.einsum("ti,tij->tj", additional_features, additional_rotations)
+        
+        data = np.concatenate([data, additional_data], axis=0)
+    
+    return data
 
   elif data == "2spirals":
     n = np.sqrt(np.random.rand(batch_size // 2, 1)) * 540 * (2 * np.pi) / 360

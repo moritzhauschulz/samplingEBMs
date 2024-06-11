@@ -63,6 +63,7 @@ def get_args():
     parser.add_argument('--epoch_save', default=100, type=int, help='num epochs between save')
     parser.add_argument('--experiment_name', default="", type=str, help='unique experiment name for meta data')
     parser.add_argument('--evaluate', default=True, type=bool, help='evaluate final nll and mmd')
+    parser.add_argument('--verbose', default=False, type=bool, help='evaluate final nll and mmd')
 
 
     args = parser.parse_args()
@@ -164,4 +165,4 @@ if __name__ == '__main__':
 
     main_fn = eval(f'{args.methods}_main_loop')
 
-    main_fn(db, args, verbose=True)
+    main_fn(db, args, verbose=args.verbose)
