@@ -92,7 +92,7 @@ def main_loop(db, args, verbose=False):
         print('Training rate matching on EBM requires a trained EBM model. Run "python main.py --data_name moons --methods ed_ebm --gpu 0 --vocab_size 2" and try again.')
         sys.exit(1)
     ebm_model.eval()
-    utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.save_dir}/heat.pdf', args)
+    utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}/initial_heat.png', args)
 
     flow_model = MLPFlow(args).to(args.device)
     optimizer = torch.optim.Adam(flow_model.parameters(), lr=1e-4)

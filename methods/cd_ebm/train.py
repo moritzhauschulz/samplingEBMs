@@ -122,7 +122,7 @@ def main_loop(db, args, verbose=False):
             torch.save(model.state_dict(), f'{args.ckpt_path}/model_{epoch}.pt')
 
             if args.vocab_size == 2:
-                utils.plot_heat(model, db.f_scale, args.bm, f'{args.plot_path}/heat_{epoch}.pdf', args)
+                utils.plot_heat(model, db.f_scale, args.bm, f'{args.plot_path}/heat_{epoch}.png', args)
                 utils.plot_sampler(model, f'{args.sample_path}/samples_{epoch}.png', args)
 
  

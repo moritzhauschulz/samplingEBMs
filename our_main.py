@@ -58,10 +58,12 @@ def get_args():
 
     parser.add_argument('--num_epochs', default=1000, type=int, help='num epochs')
     parser.add_argument('--iter_per_epoch', default=100, type=int, help='num iterations per epoch')
-    parser.add_argument('--surrogate_iter_per_epoch', default=100, type=int, help='surrogate sampler: num iterations per epoch')
-    parser.add_argument('--ebm_iter_per_epoch', default=100, type=int, help='ebm: num iterations per epoch')
+    parser.add_argument('--surrogate_iter_per_epoch', default=1, type=int, help='surrogate sampler: num iterations per epoch')
+    parser.add_argument('--ebm_iter_per_epoch', default=1, type=int, help='ebm: num iterations per epoch')
     parser.add_argument('--epoch_save', default=100, type=int, help='num epochs between save')
     parser.add_argument('--experiment_name', default="", type=str, help='unique experiment name for meta data')
+    parser.add_argument('--evaluate', default=True, type=bool, help='evaluate final nll and mmd')
+
 
     args = parser.parse_args()
 
@@ -90,7 +92,7 @@ def get_args():
             print('use cpu')
 
     #set paths
-    args.save_dir = f'./methods/{args.methods}/experiments/{args.data_name}/'
+    args.save_dir = f'./methods/{args.methods}/experiments/{args.data_name}'
     os.makedirs(args.save_dir, exist_ok=True)
 
     experiment_idx_path = f'{args.save_dir}/experiment_idx.json'
@@ -140,12 +142,12 @@ def get_args():
 def plot_binary_data_samples(db, args):
     data = utils.float2bin(db.gen_batch(1000), args.bm, args.discrete_dim, args.int_scale)
     float_data = utils.bin2float(data.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
-    utils.plot_samples(float_data, f'{args.save_dir}/data_sample.pdf', im_size=4.1, im_fmt='pdf')
+    utils.plot_samples(float_data, f'{args.sample_path}/source_data_sample.png', im_size=4.1)
 
 def plot_categorical_data_samples(db, args):
     data = utils.ourfloat2base(db.gen_batch(1000), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
     float_data = utils.ourbase2float(data.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
-    utils.plot_samples(float_data, f'{args.save_dir}/data_sample.pdf', im_size=4.1, im_fmt='pdf')
+    utils.plot_samples(float_data, f'{args.sample_path}/source_data_sample.png', im_size=4.1)
 
 if __name__ == '__main__':
     args = get_args()

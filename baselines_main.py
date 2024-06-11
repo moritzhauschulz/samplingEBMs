@@ -155,12 +155,12 @@ def get_args():
 def plot_binary_data_samples(db, args):
     data = utils.float2bin(db.gen_batch(1000), args.bm, args.discrete_dim, args.int_scale)
     float_data = utils.bin2float(data.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
-    utils.plot_samples(float_data, f'{args.save_dir}/data_sample.pdf', im_size=4.1, im_fmt='pdf')
+    utils.plot_samples(float_data, f'{args.sample_path}/source_data_sample.pdf', im_size=4.1)
 
 def plot_categorical_data_samples(db, args):
     data = utils.ourfloat2base(db.gen_batch(1000), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
     float_data = utils.ourbase2float(data.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
-    utils.plot_samples(float_data, f'{args.save_dir}/data_sample.pdf', im_size=4.1, im_fmt='pdf')
+    utils.plot_samples(float_data, f'{args.sample_path}/source_data_sample.pdf', im_size=4.1)
 
 if __name__ == '__main__':
     args = get_args()
