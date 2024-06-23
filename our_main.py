@@ -64,9 +64,9 @@ def get_args():
     parser.add_argument("--lin_k", "--lk", type=int, default=0, choices=[0, 1])
     parser.add_argument("--warmup_k", "--wk", type=lambda x: int(float(x)), default=0, help="need to use w/ lin_k")
     parser.add_argument("--K", type=int, default=-1, help="for gfn back forth negative sample generation")
-
+    
     parser.add_argument("--final_ais_samples", type=int, default=1000000)
-    parser.add_argument("--intermediate_ais_samples", type=int, default=100000)
+    parser.add_argument("--intermediate_ais_samples", type=int, default=10000)
     parser.add_argument("--final_ais_num_steps", type=int, default=1000)
     parser.add_argument("--intermediate_ais_num_steps", type=int, default=100)
 

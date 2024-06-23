@@ -75,7 +75,7 @@ def get_args():
     parser.add_argument('--verbose', default=False, type=bool, help='verbose')
 
     parser.add_argument("--final_ais_samples", type=int, default=1000000)
-    parser.add_argument("--intermediate_ais_samples", type=int, default=100000)
+    parser.add_argument("--intermediate_ais_samples", type=int, default=10000)
     parser.add_argument("--final_ais_num_steps", type=int, default=1000)
     parser.add_argument("--intermediate_ais_num_steps", type=int, default=100)
 

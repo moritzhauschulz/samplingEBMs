@@ -19,6 +19,28 @@ from utils.sampler import GibbsSampler
 def energy_source(x):
     return -torch.sum(torch.log((1 - 0.5) ** x * 0.5 ** (1-x)), dim=-1)
 
+def ais_mcmc_step(args, x, energy_fn, step_size=0.1):
+    gc.collect()
+    torch.cuda.empty_cache()
+    x_new = torch.bernoulli(torch.full_like(x, 0.5))
+    gc.collect()
+    torch.cuda.empty_cache()
+    # print_cuda_memory_stats()
+    with torch.no_grad():
+      energy_old = energy_fn(x).detach().cpu()
+    gc.collect()
+    torch.cuda.empty_cache()
+    # print_cuda_memory_stats()
+    with torch.no_grad():
+      energy_new =  energy_fn(x_new).detach().cpu()
+    gc.collect()
+    torch.cuda.empty_cache()
+    # print_cuda_memory_stats()
+    accept_prob = torch.exp(energy_old - energy_new)
+    accept = torch.rand(x.shape[0]) < accept_prob
+    x[accept] = x_new[accept]
+    return x
+
 def make_plots(log_path):
 
   # Read the CSV file
