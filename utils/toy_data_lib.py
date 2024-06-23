@@ -14,6 +14,16 @@ def inf_train_gen(data, rng=None, batch_size=200):
     data = sklearn.datasets.make_swiss_roll(n_samples=batch_size, noise=1.0)[0]
     data = data.astype("float32")[:, [0, 2]]
     data /= 5
+
+    if data.shape[0] != batch_size:
+        # If fewer samples are generated, resample the difference
+        difference = batch_size - data.shape[0]
+        additional_data = sklearn.datasets.make_swiss_roll(n_samples=difference, noise=1.0)[0]
+        additional_data = additional_data.astype("float32")[:, [0, 2]]
+        additional_data /= 5
+        # Concatenate the original and additional data
+        data = np.vstack((data, additional_data))
+
     return data
 
   elif data == "circles":

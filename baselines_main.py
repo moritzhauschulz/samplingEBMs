@@ -6,6 +6,7 @@ import json
 import numpy as np
 
 from utils import utils
+from utils.eval import log_args
 from methods.eb_gfn.train import main_loop as eb_gfn_main_loop
 
 def convert_namespace_to_dict(args):
@@ -41,7 +42,7 @@ def get_args():
     parser.add_argument('--n_iters', "--ni", type=int, default=100000)
     parser.add_argument('--batch_size', "--bs", type=int, default=128)
     parser.add_argument('--print_every', "--pe", type=int, default=100)
-    parser.add_argument('--eval_every', type=int, default=2000)
+    parser.add_argument('--eval_every', type=int, default=1000)
     parser.add_argument('--lr', type=float, default=.0001)
     parser.add_argument("--ebm_every", "--ee", type=int, default=1, help="EBM training frequency")
 
@@ -71,8 +72,12 @@ def get_args():
     parser.add_argument("--zlr", type=float, default=1)
     parser.add_argument("--momentum", "--mom", type=float, default=0.0)
     parser.add_argument("--gfn_weight_decay", "--gwd", type=float, default=0.0)
-    parser.add_argument('--evaluate', default=True, type=bool, help='evaluate final nll and mmd')
-    parser.add_argument('--verbose', default=False, type=bool, help='evaluate final nll and mmd')
+    parser.add_argument('--verbose', default=False, type=bool, help='verbose')
+
+    parser.add_argument("--final_ais_samples", type=int, default=1000000)
+    parser.add_argument("--intermediate_ais_samples", type=int, default=100000)
+    parser.add_argument("--final_ais_num_steps", type=int, default=1000)
+    parser.add_argument("--intermediate_ais_num_steps", type=int, default=100)
 
     args = parser.parse_args()
 
@@ -108,27 +113,33 @@ def get_args():
     args.save_dir = f'./methods/{args.methods}/experiments/{args.data_name}/'
     os.makedirs(args.save_dir, exist_ok=True)
 
-    experiment_idx_path = f'{args.save_dir}/experiment_idx.json'
-    if os.path.exists(experiment_idx_path) and os.path.getsize(experiment_idx_path) > 0:
-        try:
-            with open(experiment_idx_path, 'r') as file:
-                experiment_idx = json.load(file)
-        except json.JSONDecodeError:
-            print("Warning: JSON file is corrupted. Initializing a new experiment index.")
-            experiment_idx = {}
-    else:
-        experiment_idx = {}
+    # experiment_idx_path = f'{args.save_dir}/experiment_idx.json'
+    # if os.path.exists(experiment_idx_path) and os.path.getsize(experiment_idx_path) > 0:
+    #     try:
+    #         with open(experiment_idx_path, 'r') as file:
+    #             experiment_idx = json.load(file)
+    #     except json.JSONDecodeError:
+    #         print("Warning: JSON file is corrupted. Initializing a new experiment index.")
+    #         experiment_idx = {}
+    # else:
+    #     experiment_idx = {}
     
-    args.idx = 0
-    while True:
-        if str(args.idx) in experiment_idx.keys():
-            args.idx += 1
-        else:
-            break
+    # args.idx = 0
+    # while True:
+    #     if str(args.idx) in experiment_idx.keys():
+    #         args.idx += 1
+    #     else:
+    #         break
+    args.completed = False
+
+    args.index_path = f'{args.save_dir}/experiment_idx.json'
+    log_args(args.methods, args.data_name, args)
     
-    args.ckpt_path = f'{args.save_dir}/{args.data_name}_{str(args.idx)}/ckpts/'
-    args.plot_path = f'{args.save_dir}/{args.data_name}_{str(args.idx)}/plots/'
-    args.sample_path = f'{args.save_dir}/{args.data_name}_{str(args.idx)}/samples/'
+    args.ckpt_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/ckpts/'
+    args.plot_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/plots/'
+    args.sample_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/samples/'
+    args.log_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/log.csv'
+    
 
     if os.path.exists(args.ckpt_path):
         print(f'removed checkpoint data that was not indexed')
@@ -144,14 +155,16 @@ def get_args():
     os.makedirs(args.sample_path, exist_ok=True)
 
     # Save the updated experiment index to the file
-    experiment_idx[args.idx] = convert_namespace_to_dict(args)
-    with open(experiment_idx_path, 'w') as file:
-        json.dump(experiment_idx, file, indent=4)
+    # experiment_idx[args.idx] = convert_namespace_to_dict(args)
+    # with open(experiment_idx_path, 'w') as file:
+    #     json.dump(experiment_idx, file, indent=4)
 
-    print(f"Experiment meta data saved to {args.save_dir}experiment_idx.json")
+    # print(f"Experiment meta data saved to {args.save_dir}experiment_idx.json")
 
-    print("Device:" + str(device))
-    print("Args:" + str(args))
+    log_args(args.methods, args.data_name, args)
+
+    # print("Device:" + str(device))
+    # print("Args:" + str(args))
 
     return args
 

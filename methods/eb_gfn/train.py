@@ -18,7 +18,9 @@ from utils import sampler
 from utils.eval import ebm_evaluation
 from utils.eval import sampler_evaluation
 from utils.eval import sampler_ebm_evaluation
+from utils.eval import log
 from utils.utils import get_batch_data
+from utils.eval import log_completion
 
 
 def makedirs(path):
@@ -52,8 +54,8 @@ def main_loop(db, args):
     inv_bm = args.inv_bm
 
     batch_size = args.batch_size
-    multiples = {'pinwheel': 5, '2spirals': 2}
-    batch_size = batch_size - batch_size % multiples.get(args.data_name, 1)
+    # multiples = {'pinwheel': 5, '2spirals': 2}                                #not sure what this is for?
+    # batch_size = batch_size - batch_size % multiples.get(args.data_name, 1)   #not sure what this is for? 
 
     ############## EBM model
     net = MLPScore(args.discrete_dim, [256] * 3 + [1], nonlinearity='swish').to(args.device)
@@ -72,6 +74,10 @@ def main_loop(db, args):
     best_val_ll = -np.inf
     best_itr = -1
     lr = args.lr
+
+    start_time = time.time()
+    cum_eval_time = 0
+
     while itr < args.n_iters:
         st = time.time()
 
@@ -131,12 +137,17 @@ def main_loop(db, args):
                 itr, st, lr, logp_real.mean().item(), logp_fake.mean().item(), obj.item(), update_success_rate))
 
 
-        if (itr + 1) % args.eval_every == 0:
-            if args.vocab_size == 2:
-                utils.plot_heat(energy_model, db.f_scale, bm, f'{args.plot_path}ebm_heat_{itr + 1}.png', args)
-                gfn_samples = gfn.sample(4000).detach()
-                gfn_samp_float = utils.bin2float(gfn_samples.data.cpu().numpy().astype(int), inv_bm, args.discrete_dim, args.int_scale)
-                utils.plot_samples(gfn_samp_float, f'{args.sample_path}ebm_samples_{itr + 1}.png', im_size=4.1, im_fmt='png')
+        if (itr + 1) % args.eval_every == 0 or (itr + 1) == args.n_iters:
+            eval_start_time = time.time()
+            log_entry = {'epoch':None,'timestamp':None}
+
+            if itr + 1 < args.n_iters:
+                ais_samples = args.intermediate_ais_samples
+                ais_num_steps = args.intermediate_ais_num_steps
+            else: 
+                ais_samples =  args.final_ais_samples
+                ais_num_steps = args.final_ais_num_steps
+
 
             # GFN LL
             gfn.model.eval()
@@ -150,19 +161,32 @@ def main_loop(db, args):
                 logps.append(logp.reshape(-1))
                 pbar.set_postfix({"logp": f"{torch.cat(logps).mean().item():.2f}"})
             gfn_test_ll = torch.cat(logps).mean()
-
             print(f"Test NLL ({itr}): GFN: {-gfn_test_ll.item():.3f}")
 
 
+            energy_model.eval()
+            gfn.model.eval()
+            log_entry['ebm_nll'], log_entry['ebm_mmd'] = ebm_evaluation(args, db, energy_model, batch_size=4000, ais_samples=ais_samples, ais_num_steps=ais_num_steps) # batch_size=4000, ais_samples=1000000, ais_num_intermediate=100
+            log_entry['sampler_mmd'] = sampler_evaluation(args, db, lambda x: gfn.sample(x))
+            log_entry['sampler_ebm_mmd'] = sampler_ebm_evaluation(args, db, lambda x: gfn.sample(x), energy_model)
+
+            if args.vocab_size == 2:
+                utils.plot_heat(energy_model, db.f_scale, bm, f'{args.plot_path}ebm_heat_{itr + 1}.png', args)
+                gfn_samples = gfn.sample(4000).detach()
+                gfn_samp_float = utils.bin2float(gfn_samples.data.cpu().numpy().astype(int), inv_bm, args.discrete_dim, args.int_scale)
+                utils.plot_samples(gfn_samp_float, f'{args.sample_path}ebm_samples_{itr + 1}.png', im_size=4.1, im_fmt='png')
+
+            torch.save(energy_model.state_dict(), f'{args.ckpt_path}ebm_model_{itr + 1}.pt')
+            torch.save(gfn.model.state_dict(), f'{args.ckpt_path}gfn_model_{itr + 1}.pt')
+            
+            eval_end_time = time.time()
+            eval_time = eval_end_time - eval_start_time
+            cum_eval_time += eval_time
+            timestamp = time.time() - cum_eval_time - start_time
+
+            log(args, log_entry, itr + 1, timestamp)
+
         itr += 1
-        # if itr > args.n_iters:
-        #     quit(0)
 
-    if args.evaluate:
-        energy_model.eval()
-        ebm_evaluation(args, db, energy_model, batch_size=4000, ais_samples=1000000, ais_num_intermediate=100) #ais_num_intermediate should maybe be 1000
-        sampler_evaluation(args, db, lambda x: gfn.sample(x))
-        sampler_ebm_evaluation(args, db, lambda x: gfn.sample(x), ebm_model)
-
-
-        
+    make_plots(args.log_path)
+    log_completion(args.methods, args.data_name, args)

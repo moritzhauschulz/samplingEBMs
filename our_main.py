@@ -6,6 +6,7 @@ import json
 import numpy as np
 
 from utils import utils
+from utils.eval import log_args
 from methods.runidb.train import main_loop as runidb_main_loop
 from methods.punidb.train import main_loop as punidb_main_loop
 
@@ -14,16 +15,16 @@ from methods.ebm_runidb.train import main_loop as ebm_runidb_main_loop
 
 from methods.cd_ebm.train import main_loop as cd_ebm_main_loop
 from methods.cd_runi_inter.train import main_loop as cd_runi_inter_main_loop
+# def convert_namespace_to_dict(args):
+#     args_dict = vars(args).copy()  # Convert Namespace to dictionary
+#     # Handle non-serializable objects
+#     for key, value in args_dict.items():
+#         if isinstance(value, torch.device):
+#             args_dict[key] = str(value)
+#     args_dict.pop('bm', None)
+#     args_dict.pop('inv_bm', None)
+#     return args_dict
 
-def convert_namespace_to_dict(args):
-    args_dict = vars(args).copy()  # Convert Namespace to dictionary
-    # Handle non-serializable objects
-    for key, value in args_dict.items():
-        if isinstance(value, torch.device):
-            args_dict[key] = str(value)
-    args_dict.pop('bm', None)
-    args_dict.pop('inv_bm', None)
-    return args_dict
 
 def get_args():
     parser = argparse.ArgumentParser(description='Pipeline')
@@ -41,15 +42,10 @@ def get_args():
     parser.add_argument('--vocab_size', type=int, default=5)
     parser.add_argument('--cd_alpha', type=float, default=0.1)
     parser.add_argument('--delta_t', type=float, default=0.01)
-    parser.add_argument('--eval_every', type=int, default=2000)
     parser.add_argument('--mps', action='store_true', help='Try using apple silicon chip (if no gpu available)')
     parser.add_argument('--noise', type=int, default=1)
     parser.add_argument('--lr', type=float, default=1e-4)
-    parser.add_argument("--gfn_l1loss", "--l1l", type=int, default=0, choices=[0, 1], help="use soft l1 loss instead of l2")
-    parser.add_argument("--with_mh", "--wm", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--rand_k", "--rk", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--lin_k", "--lk", type=int, default=0, choices=[0, 1])
-    
+
     parser.add_argument("--gfn_type", type=str)
     parser.add_argument("--gfn_bn", "--gbn", type=int, default=0, choices=[0, 1])
 
@@ -57,14 +53,22 @@ def get_args():
     parser.add_argument('--batch_size', default=128, type=int, help='batch size')
 
     parser.add_argument('--num_epochs', default=1000, type=int, help='num epochs')
-    parser.add_argument('--iter_per_epoch', default=100, type=int, help='num iterations per epoch')
     parser.add_argument('--surrogate_iter_per_epoch', default=1, type=int, help='surrogate sampler: num iterations per epoch')
     parser.add_argument('--ebm_iter_per_epoch', default=1, type=int, help='ebm: num iterations per epoch')
-    parser.add_argument('--epoch_save', default=100, type=int, help='num epochs between save')
+    parser.add_argument('--eval_every', type=int, default=1000)
     parser.add_argument('--experiment_name', default="", type=str, help='unique experiment name for meta data')
-    parser.add_argument('--evaluate', default=True, type=bool, help='evaluate final nll and mmd')
     parser.add_argument('--verbose', default=False, type=bool, help='evaluate final nll and mmd')
 
+    parser.add_argument("--with_mh", "--wm", type=int, default=0, choices=[0, 1])
+    parser.add_argument("--rand_k", "--rk", type=int, default=0, choices=[0, 1])
+    parser.add_argument("--lin_k", "--lk", type=int, default=0, choices=[0, 1])
+    parser.add_argument("--warmup_k", "--wk", type=lambda x: int(float(x)), default=0, help="need to use w/ lin_k")
+    parser.add_argument("--K", type=int, default=-1, help="for gfn back forth negative sample generation")
+
+    parser.add_argument("--final_ais_samples", type=int, default=1000000)
+    parser.add_argument("--intermediate_ais_samples", type=int, default=100000)
+    parser.add_argument("--final_ais_num_steps", type=int, default=1000)
+    parser.add_argument("--intermediate_ais_num_steps", type=int, default=100)
 
     args = parser.parse_args()
 
@@ -96,27 +100,33 @@ def get_args():
     args.save_dir = f'./methods/{args.methods}/experiments/{args.data_name}'
     os.makedirs(args.save_dir, exist_ok=True)
 
-    experiment_idx_path = f'{args.save_dir}/experiment_idx.json'
-    if os.path.exists(experiment_idx_path) and os.path.getsize(experiment_idx_path) > 0:
-        try:
-            with open(experiment_idx_path, 'r') as file:
-                experiment_idx = json.load(file)
-        except json.JSONDecodeError:
-            print("Warning: JSON file is corrupted. Initializing a new experiment index.")
-            experiment_idx = {}
-    else:
-        experiment_idx = {}
+    # experiment_idx_path = f'{args.save_dir}/experiment_idx.json'
+    # if os.path.exists(experiment_idx_path) and os.path.getsize(experiment_idx_path) > 0:
+    #     try:
+    #         with open(experiment_idx_path, 'r') as file:
+    #             experiment_idx = json.load(file)
+    #     except json.JSONDecodeError:
+    #         print("Warning: JSON file is corrupted. Initializing a new experiment index.")
+    #         experiment_idx = {}
+    # else:
+    #     experiment_idx = {}
+
+    # args.idx = 0
+    # while True:
+    #     if str(args.idx) in experiment_idx.keys():
+    #         args.idx += 1
+    #     else:
+    #         break
+
+    args.completed = False
+
+    args.index_path = f'{args.save_dir}/experiment_idx.json'
+    log_args(args.methods, args.data_name, args)
     
-    args.idx = 0
-    while True:
-        if str(args.idx) in experiment_idx.keys():
-            args.idx += 1
-        else:
-            break
-    
-    args.ckpt_path = f'{args.save_dir}/{args.data_name}_{str(args.idx)}/ckpts/'
-    args.plot_path = f'{args.save_dir}/{args.data_name}_{str(args.idx)}/plots/'
-    args.sample_path = f'{args.save_dir}/{args.data_name}_{str(args.idx)}/samples/'
+    args.ckpt_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/ckpts/'
+    args.plot_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/plots/'
+    args.sample_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/samples/'
+    args.log_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/log.csv'
 
     if os.path.exists(args.ckpt_path):
         print(f'removed checkpoint data that was not indexed')
@@ -132,11 +142,11 @@ def get_args():
     os.makedirs(args.sample_path, exist_ok=True)
 
     # Save the updated experiment index to the file
-    experiment_idx[args.idx] = convert_namespace_to_dict(args)
-    with open(experiment_idx_path, 'w') as file:
-        json.dump(experiment_idx, file, indent=4)
+    # experiment_idx[args.idx] = convert_namespace_to_dict(args)
+    # with open(experiment_idx_path, 'w') as file:
+    #     json.dump(experiment_idx, file, indent=4)
 
-    print(f"Experiment meta data saved to {args.save_dir}experiment_idx.json")
+    # print(f"Experiment meta data saved to {args.save_dir}experiment_idx.json")
 
     return args
 

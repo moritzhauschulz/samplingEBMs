@@ -3,11 +3,13 @@ import os
 import json
 import torch
 import shutil
+import random
 import numpy as np
 from tqdm import tqdm
 import torch.distributions as dists
 from torch.distributions.categorical import Categorical
 import pickle
+import time
 
 from utils import utils
 from methods.cd_runi_inter.model import MLPScore, EBM
@@ -17,16 +19,18 @@ from utils.eval import ebm_evaluation
 from utils.eval import sampler_evaluation
 from utils.eval import sampler_ebm_evaluation
 from utils.utils import get_batch_data
+from utils.eval import log
+from utils.eval import log_completion
 
-def gen_samples(model, args, batch_size=None):
+def gen_samples(model, args, batch_size=None, t=0.0, xt=None):
     model.eval()
     S, D = args.vocab_size, args.discrete_dim
 
-    t = 0.0
     dt = args.delta_t
     if batch_size is None:
         batch_size = args.batch_size
-    xt = torch.randint(0, S, (batch_size, D)).to(args.device)
+    if xt is None:
+        xt = torch.randint(0, S, (batch_size, D)).to(args.device)
 
     while t < 1.0:
         t_ = t * torch.ones((batch_size,)).to(args.device)
@@ -89,6 +93,10 @@ def main_loop(db, args, verbose=False):
     ebm_optimizer = torch.optim.Adam(ebm_model.parameters(), lr=1e-4)
 
     pbar = tqdm(range(1,args.num_epochs + 1))
+
+    start_time = time.time()
+    cum_eval_time = 0
+
     for epoch in pbar:
 
         #dfs training
@@ -117,16 +125,6 @@ def main_loop(db, args, verbose=False):
             if verbose:
                 dfs_pbar.set_description(f'Epoch {epoch} Iter {it} DFS Loss {loss.item()}')
 
-        if (epoch + 1) % args.epoch_save == 0:
-            torch.save(dfs_model.state_dict(), f'{args.ckpt_path}afs_model_{epoch + 1}.pt')
-
-            samples = gen_samples(dfs_model, args, batch_size=args.batch_size * 10)
-            if args.vocab_size == 2:
-                float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
-            else:
-                float_samples = utils.ourbase2float(samples.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
-            utils.plot_samples(float_samples, f'{args.sample_path}dfs_sample_{epoch + 1}.png', im_size=4.1, im_fmt='png')
-
         
         #ebm training
         dfs_model.eval()
@@ -138,7 +136,35 @@ def main_loop(db, args, verbose=False):
             data_samples = get_batch_data(db, args)
             data_samples = torch.from_numpy(np.float32(data_samples)).to(args.device)
             
-            model_samples = torch.from_numpy(gen_samples(dfs_model, args)).to(args.device)
+            #sample from
+
+            if args.rand_k or args.lin_k or (args.K > 0):
+                if args.rand_k:
+                    K = random.randrange(0,1/args.delta_t) + 1
+                elif args.lin_k:
+                    K = min(1/args.delta_t, int(1/args.delta_t * float(epoch + 1) / args.warmup_k))
+                    K = max(K, 1)
+                elif args.K > 0:
+                    K = args.K
+                else:
+                    raise ValueError
+                
+                #delete this...
+                if epoch % 500 == 1:
+                    print(f'K is at {K}')
+                    print(f'Corresponding t is {K * args.delta_t}')
+
+                #go back via p(x_{1-K}|x_1)
+                (B, D), S = data_samples.size(), args.vocab_size
+                xt = data_samples.clone().long()
+                uniform_noise = torch.randint(0, S, (B, D)).to(args.device)
+                corrupt_mask = torch.rand((B, D)).to(args.device) < (K * args.delta_t)
+                xt[corrupt_mask] = uniform_noise[corrupt_mask]
+
+                #go forth via DFS starting at x_t
+                model_samples = torch.from_numpy(gen_samples(dfs_model, args, t=K * args.delta_t, xt=xt)).to(args.device)
+            else:
+                model_samples = torch.from_numpy(gen_samples(dfs_model, args)).to(args.device)
 
             data_nrg = ebm_model(data_samples)
             model_nrg = ebm_model(model_samples)
@@ -155,21 +181,53 @@ def main_loop(db, args, verbose=False):
             if verbose:
                 ebm_pbar.set_description(f'Epoch {epoch} Iter {it} EBM Loss {loss.item()}')
 
-        if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs - 1):
 
-            torch.save(ebm_model.state_dict(), f'{args.ckpt_path}ebm_model_{epoch}.pt')
+        if (epoch) % args.eval_every == 0 or epoch == args.num_epochs:
+            eval_start_time = time.time()
+            log_entry = {'epoch':None,'timestamp':None}
 
+            if epoch < args.num_epochs:
+                ais_samples = args.intermediate_ais_samples
+                ais_num_steps = args.intermediate_ais_num_steps
+            else: 
+                ais_samples =  args.final_ais_samples
+                ais_num_steps = args.final_ais_num_steps
+
+            ebm_model.eval()
+            log_entry['ebm_nll'], log_entry['ebm_mmd'] = ebm_evaluation(args, db, ebm_model, batch_size=4000, ais_samples=ais_samples, ais_num_steps=ais_num_steps) #batch_size=4000, ais_samples=1000000, ais_num_intermediate=100
+            log_entry['sampler_mmd'] = sampler_evaluation(args, db, lambda x: torch.from_numpy(gen_samples(dfs_model, args, batch_size=x)))
+            log_entry['sampler_ebm_mmd'] = sampler_ebm_evaluation(args, db, lambda x: torch.from_numpy(gen_samples(dfs_model, args, batch_size=x)), ebm_model)
+            
             if args.vocab_size == 2:
                 utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}ebm_heat_{epoch}.png', args)
                 utils.plot_sampler(ebm_model, f'{args.sample_path}ebm_samples_{epoch}.png', args)
+            
+            samples = gen_samples(dfs_model, args, batch_size=args.batch_size * 10)
+            if args.vocab_size == 2:
+                float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
+            else:
+                float_samples = utils.ourbase2float(samples.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
+            utils.plot_samples(float_samples, f'{args.sample_path}dfs_sample_{epoch}.png', im_size=4.1, im_fmt='png')
+
+            torch.save(dfs_model.state_dict(), f'{args.ckpt_path}dfs_model_{epoch}.pt')
+            torch.save(ebm_model.state_dict(), f'{args.ckpt_path}ebm_model_{epoch}.pt')
+
+            # if not os.path.exists(args, log):
+            #     initialize_log_file()
+
+            eval_end_time = time.time()
+            eval_time = eval_end_time - eval_start_time
+            cum_eval_time += eval_time
+            timestamp = time.time() - cum_eval_time - start_time
+
+            log(args, log_entry, epoch, timestamp)
+            
+            
 
         pbar.set_description(f'Epoch {epoch}')
 
-    if args.evaluate:
-        ebm_model.eval()
-        ebm_evaluation(args, db, ebm_model, batch_size=4000, ais_samples=1000000, ais_num_intermediate=100) #ais_num_intermediate should maybe be 1000
-        sampler_evaluation(args, db, lambda x: torch.from_numpy(gen_samples(dfs_model, args, batch_size=x)))
-        sampler_ebm_evaluation(args, db, lambda x: torch.from_numpy(gen_samples(dfs_model, args, batch_size=x)), ebm_model)
+    make_plots(args.log_path)
+    log_completion(args.methods, args.data_name, args)
 
 
  
