@@ -10,6 +10,7 @@ import json
 import gc
 import pandas as pd
 import matplotlib.pyplot as plt
+import sys
 
 from utils.utils import get_batch_data
 from utils.utils import print_cuda_memory_stats
@@ -264,11 +265,10 @@ def log_args(method, data, args):
           with open(args.index_path, 'r') as file:
               experiment_idx = json.load(file)
       except json.JSONDecodeError:
-          print("Warning: JSON file is corrupted. Initializing a new experiment index.")
-          experiment_idx = {}
+          print("Warning: JSON file is corrupted. Aborting.")
+          sys.exit(1)
   else:
       experiment_idx = {}
-
 
   experiment_number = 0
   # if not method in experiment_idx.keys():

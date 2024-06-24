@@ -5,39 +5,42 @@ mkdir -p $log_dir
 #our DFS-EBM 1;1
 
 #2spirals
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001  #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001  > $log_dir/output1.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 10 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 10 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 > $log_dir/output2.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 100 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 100 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 > $log_dir/output3.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1000 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1000 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 > $log_dir/output4.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 > $log_dir/output5.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 10 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 10 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 > $log_dir/output6.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 100 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 100 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 > $log_dir/output7.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1000 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1000 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 > $log_dir/output8.log 2>&1 &
+
+wait
 
 #2spirals - with warmup
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 --warmup_k 1e5 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 --warmup_k 1e5 > $log_dir/output1.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 10 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 --warmup_k 1e5 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 10 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 --warmup_k 1e5 > $log_dir/output2.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 100 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 --warmup_k 1e5 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 100 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 --warmup_k 1e5 > $log_dir/output3.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1000 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 --warmup_k 1e5 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1000 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 --warmup_k 1e5 > $log_dir/output4.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 --warmup_k 1e5 #>  $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 --warmup_k 1e5 >  $log_dir/output5.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 10 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 --warmup_k 1e5 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 10 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 --warmup_k 1e5 > $log_dir/output6.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 100 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 --warmup_k 1e5 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 100 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 --warmup_k 1e5 > $log_dir/output7.log 2>&1 &
 
-python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1000 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 --warmup_k 1e5 #> $log_dir/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1000 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.001 --lr 0.001 --warmup_k 1e5 > $log_dir/output8.log 2>&1 &
 
+wait
 
 # #8gaussians
 # python our_main.py --data_name 8gaussians --methods cd_runi_inter --gpu 0 --vocab_size 2 --eval_every 2000 --num_epochs 100000 --surrogate_iter_per_epoch 1 --ebm_iter_per_epoch 1 --batch_size 128 --delta_t 0.01 --lr 0.001 #> $log_dir/output1.log 2>&1 &
