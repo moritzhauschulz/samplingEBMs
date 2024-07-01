@@ -42,7 +42,16 @@ def ais_mcmc_step(args, x, energy_fn, step_size=0.1):
     x[accept] = x_new[accept]
     return x
 
-def make_plots(log_path):
+def make_plots(log_path, output_dir=''):
+
+  folder_path = os.path.dirname(log_path)
+
+  if output_dir == '':
+    epochs_output = folder_path + '/metrics_over_epochs.png'
+    time_output = folder_path + '/metrics_over_time.png'
+  else: 
+    epochs_output = output_dir + '/metrics_over_epochs.png'
+    time_output = output_dir + '/metrics_over_time.png'
 
   # Read the CSV file
   df = pd.read_csv(log_path)
@@ -75,7 +84,7 @@ def make_plots(log_path):
   ax2.legend(loc='upper right')
 
   # Save the plot as a PNG file
-  plt.savefig('metrics_over_epochs.png')
+  plt.savefig(epochs_output)
   plt.show()
 
   # Plot metrics over time and save as PNG
@@ -100,7 +109,7 @@ def make_plots(log_path):
   ax2.legend(loc='upper right')
 
   # Save the plot as a PNG file
-  plt.savefig('metrics_over_time.png')
+  plt.savefig(time_output)
   plt.show()
 
 def annealed_importance_sampling(args, score_fn, num_samples, num_intermediate, num_mcmc_steps, latent_dim):

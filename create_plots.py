@@ -1,8 +1,20 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from utils.eval import make_plots
+import argparse
+
+def get_args():
+    parser = argparse.ArgumentParser(description='Pipeline')
+
+    parser.add_argument('--csv_file', type=str, default='')
+    parser.add_argument('--output', type=str, default='')
 
 
-# Read the CSV file
-csv_file = '/vol/bitbucket/meh23/samplingEBMs/methods/cd_runi_inter/experiments/2spirals/2spirals_cd_runi_inter_2spirals_1/log.csv'  # replace with the path to your CSV file
-make_plots(csv_file)
+    args = parser.parse_args()
+
+    return args
+
+if __name__ == '__main__':
+    args = get_args()
+    # Read the CSV file
+    make_plots(args.csv_file, output_dir=args.output)
