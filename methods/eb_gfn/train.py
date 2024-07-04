@@ -21,6 +21,7 @@ from utils.eval import sampler_ebm_evaluation
 from utils.eval import log
 from utils.utils import get_batch_data
 from utils.eval import log_completion
+from utils.eval import make_plots
 
 
 def makedirs(path):
