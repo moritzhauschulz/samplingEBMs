@@ -194,7 +194,7 @@ def ebm_evaluation(args, db, ebm, write_to_index=True, batch_size=4000, ais_samp
   mmd_list = []
   for _ in range(10):
     gibbs_sampler = GibbsSampler(n_choices = args.vocab_size, discrete_dim=args.discrete_dim, device=args.device)
-    x = gibbs_sampler(ebm, num_rounds=100, num_samples=batch_size).to('cpu')
+    x = gibbs_sampler(ebm, num_rounds=args.gibbs_num_rounds, num_samples=batch_size).to('cpu')
     y = get_batch_data(db, args, batch_size=batch_size)
     y = torch.from_numpy(np.float32(y)).to('cpu')
     mmd_list.append(exp_hamming_mmd(x,y))

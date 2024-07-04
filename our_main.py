@@ -39,6 +39,7 @@ def get_args():
 
     parser.add_argument('--data_name', type=str, default='moons')
     parser.add_argument('--discrete_dim', type=int, default=16)
+    parser.add_argument('--gibbs_num_rounds', type=int, default=100)
     parser.add_argument('--vocab_size', type=int, default=5)
     parser.add_argument('--cd_alpha', type=float, default=0.1)
     parser.add_argument('--delta_t', type=float, default=0.01)
