@@ -24,7 +24,7 @@ def print_cuda_memory_stats():
         print(f"Free memory (within reserved): {free_memory / 1024**2:.2f} MB")
         print(f"Available memory: {(total_memory - reserved_memory + free_memory) / 1024**2:.2f} MB")
     else:
-        print("CUDA is not available on this system.")
+        print("CUDA is not available on this system. Cannot print CUDA stats.")
 
 
 def get_batch_data(db, args, batch_size=None):

@@ -44,7 +44,8 @@ def get_args():
     parser.add_argument('--delta_t', type=float, default=0.01)
     parser.add_argument('--mps', action='store_true', help='Try using apple silicon chip (if no gpu available)')
     parser.add_argument('--noise', type=int, default=1)
-    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--ebm_lr', type=float, default=1e-3)
+    parser.add_argument('--dfs_lr', type=float, default=1e-3)
 
     parser.add_argument("--gfn_type", type=str)
     parser.add_argument("--gfn_bn", "--gbn", type=int, default=0, choices=[0, 1])
