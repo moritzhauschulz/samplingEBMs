@@ -1,0 +1,29 @@
+Starting job experiment_baselines with ID 122255
+Job started at Sat  6 Jul 01:27:18 BST 2024
+use gpu indexed: 0
+Experiment meta data saved to ./methods/eb_gfn/experiments/2spirals//experiment_idx.json
+Experiment meta data saved to ./methods/eb_gfn/experiments/2spirals//experiment_idx.json
+remapping binary repr with gray code
+f_scale, 4.460353045431628 int_scale, 6001.077169802263
+model: EBM(
+  (net): MLPScore(
+    (mlp): MLP(
+      (main): Sequential(
+        (0): Linear(in_features=32, out_features=256, bias=True)
+        (1): Swish()
+        (2): Linear(in_features=256, out_features=256, bias=True)
+        (3): Swish()
+        (4): Linear(in_features=256, out_features=256, bias=True)
+        (5): Swish()
+        (6): Linear(in_features=256, out_features=1, bias=True)
+      )
+    )
+  )
+)
+(    0) | (0.919s/iter) cur lr= 1.00e-03 |log p(real)=-4.46e-02, log p(fake)=-4.45e-02, diff=-1.81e-04, update_rate=0.5
+Test NLL (4999): GFN: 20.900
+Total memory: 9728.00 MB
+Reserved memory: 84.00 MB
+Allocated memory: 23.24 MB
+Free memory (within reserved): 60.76 MB
+Available memory: 9704.76 MB
