@@ -11,6 +11,7 @@ from torch.distributions.categorical import Categorical
 import pickle
 import time
 
+from model import MixtureModel
 from utils import utils
 from methods.cd_runi_inter.model import MLPScore, EBM
 from methods.cd_runi_inter.model import MLPModel as MLPFlow
@@ -93,7 +94,8 @@ def main_loop(db, args, verbose=False):
 
     samples = get_batch_data(db, args, batch_size=10000)
     mean = np.mean(samples, axis=0)
-    q_dist = torch.distributions.Bernoulli(probs=torch.from_numpy(mean).to(args.device) * (1. - 2 * 1e-2) + 1e-2)
+    q_dist = MixtureModel(samples, mean, 0.25, device=args.device)
+
     net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
     #ebm_model = EBM(net, torch.from_numpy(mean)).to(args.device)
     
@@ -126,7 +128,7 @@ def main_loop(db, args, verbose=False):
             # mask = (torch.rand((args.batch_size,)).to(args.device) < 0.5).int().unsqueeze(1)
             # x1 = mask * x1_q + (1 - mask) * x1_p
 
-            x1 = q_dist.sample((args.batch_size,)).long() #remember that there is no data available under the assumptions
+            x1 = q_dist.sample(args.batch_size).long() 
 
             (B, D), S = x1.size(), args.vocab_size
             t = torch.rand((B,)).to(args.device)

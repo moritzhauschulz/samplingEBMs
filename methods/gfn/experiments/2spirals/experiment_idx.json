@@ -423,7 +423,7 @@
         "pretrained_ebm": "methods/ed_ebm/experiments/2spirals/2spirals_2/ckpts/model_100000.pt",
         "device": "cuda:0",
         "save_dir": "./methods/gfn/experiments/2spirals",
-        "completed": false,
+        "completed": true,
         "start_time": "2024-07-07 01:30:03",
         "index_path": "./methods/gfn/experiments/2spirals/experiment_idx.json",
         "exp_n": 7,
