@@ -4,6 +4,7 @@ import shutil
 import argparse
 import json
 import numpy as np
+import datetime
 
 from utils import utils
 from utils.eval import log_args
@@ -66,11 +67,14 @@ def get_args():
     parser.add_argument("--lin_k", "--lk", type=int, default=0, choices=[0, 1])
     parser.add_argument("--warmup_k", "--wk", type=lambda x: int(float(x)), default=0, help="need to use w/ lin_k")
     parser.add_argument("--K", type=int, default=-1, help="for gfn back forth negative sample generation")
-    
+    parser.add_argument("--eta", type=int, default=1, help="eta to determine level of stochasticity in CTMC")
+
     parser.add_argument("--final_ais_samples", type=int, default=1000000)
     parser.add_argument("--intermediate_ais_samples", type=int, default=10000)
     parser.add_argument("--final_ais_num_steps", type=int, default=1000)
     parser.add_argument("--intermediate_ais_num_steps", type=int, default=100)
+    parser.add_argument('--pretrained_ebm', type=str, default='imaginary file')
+
 
     args = parser.parse_args()
 
@@ -122,13 +126,12 @@ def get_args():
 
     args.completed = False
 
+    start_time = datetime.datetime.now()
+    args.start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
+
     args.index_path = f'{args.save_dir}/experiment_idx.json'
+
     log_args(args.methods, args.data_name, args)
-    
-    args.ckpt_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/ckpts/'
-    args.plot_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/plots/'
-    args.sample_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/samples/'
-    args.log_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/log.csv'
 
     if os.path.exists(args.ckpt_path):
         print(f'removed checkpoint data that was not indexed')
@@ -161,6 +164,7 @@ def plot_categorical_data_samples(db, args):
     data = utils.ourfloat2base(db.gen_batch(1000), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
     float_data = utils.ourbase2float(data.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
     utils.plot_samples(float_data, f'{args.sample_path}/source_data_sample.png', im_size=4.1)
+
 
 if __name__ == '__main__':
     args = get_args()

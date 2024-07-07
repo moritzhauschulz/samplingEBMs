@@ -59,11 +59,11 @@ def compute_loss(ebm_model, dfs_model, q_dist, xt, x1, t, args):
     R_star = R_star.scatter_(-1, x1[:, :, None], 1.0) / (1 - t[:, None, None])
     R_star[xt == x1] = 0.0
 
-    eta = 1.0
+    
     R_DB_1 = torch.zeros((B, D, S)).to(args.device)
-    R_DB_1[xt == x1] = 1 * eta
+    R_DB_1[xt == x1] = 1 * args.eta
     R_DB_2 = torch.zeros((B, D, S)).to(args.device)
-    R_DB_2 = R_DB_2.scatter_(-1, x1[:, :, None], 1.0) * eta * ((S*t + 1 - t) / (1-t))[:, None, None]
+    R_DB_2 = R_DB_2.scatter_(-1, x1[:, :, None], 1.0) * args.eta * ((S*t + 1 - t) / (1-t))[:, None, None]
     R_DB = R_DB_1 + R_DB_2
 
     R_true = (R_star + R_DB) * (1 - t[:, None, None])
@@ -79,6 +79,7 @@ def compute_loss(ebm_model, dfs_model, q_dist, xt, x1, t, args):
     return loss
 
 def main_loop(db, args, verbose=False):
+    assert args.vocab_size == 2, 'Only support binary data'
 
     samples = get_batch_data(db, args, batch_size=10000)
     mean = np.mean(samples, axis=0)
@@ -90,8 +91,8 @@ def main_loop(db, args, verbose=False):
     ebm_model = EBM(net).to(args.device)
     utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}/initial_heat.png', args)
 
-    dfs_optimizer = torch.optim.Adam(dfs_model.parameters(), lr=1e-4)
-    ebm_optimizer = torch.optim.Adam(ebm_model.parameters(), lr=1e-4)
+    dfs_optimizer = torch.optim.Adam(dfs_model.parameters(), lr=args.dfs_lr)
+    ebm_optimizer = torch.optim.Adam(ebm_model.parameters(), lr=args.ebm_lr)
 
     pbar = tqdm(range(1,args.num_epochs + 1))
 

@@ -11,6 +11,8 @@ import gc
 import pandas as pd
 import matplotlib.pyplot as plt
 import sys
+from filelock import FileLock, Timeout
+
 
 from utils.utils import get_batch_data
 from utils.utils import print_cuda_memory_stats
@@ -59,9 +61,6 @@ def make_plots(log_path, output_dir=''):
   # Extract metrics dynamically from the first line (excluding 'epoch' and 'timestamp')
   metrics = df.columns[2:]  # Exclude 'epoch' and 'timestamp'
 
-  # Define the main metric for the second y-axis
-  main_metric = 'ebm_nll'
-
   # Plot metrics over epochs and save as PNG
   fig, ax1 = plt.subplots(figsize=(12, 6))
 
@@ -71,17 +70,18 @@ def make_plots(log_path, output_dir=''):
 
   # Plot other metrics on the left y-axis
   for metric in metrics:
-      if metric != main_metric:
+      if metric != 'ebm_nll':
           ax1.plot(df['epoch'], df[metric], label=metric)
 
   ax1.grid(True)
   ax1.legend(loc='upper left')
 
   # Create a second y-axis for the main metric
-  ax2 = ax1.twinx()
-  ax2.set_ylabel(main_metric)
-  ax2.plot(df['epoch'], df[main_metric], color='tab:red', label=main_metric)
-  ax2.legend(loc='upper right')
+  if 'ebm_nll' in metrics:
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('ebm_nll')
+    ax2.plot(df['epoch'], df['ebm_nll'], color='tab:red', label='ebm_nll')
+    ax2.legend(loc='upper right')
 
   # Save the plot as a PNG file
   plt.savefig(epochs_output)
@@ -96,17 +96,18 @@ def make_plots(log_path, output_dir=''):
 
   # Plot other metrics on the left y-axis
   for metric in metrics:
-      if metric != main_metric:
+      if metric != 'ebm_nll':
           ax1.plot(df['timestamp'], df[metric], label=metric)
 
   ax1.grid(True)
   ax1.legend(loc='upper left')
 
   # Create a second y-axis for the main metric
-  ax2 = ax1.twinx()
-  ax2.set_ylabel(main_metric)
-  ax2.plot(df['timestamp'], df[main_metric], color='tab:red', label=main_metric)
-  ax2.legend(loc='upper right')
+  if 'ebm_nll' in metrics:
+    ax2 = ax1.twinx()
+    ax2.set_ylabel('ebm_nll')
+    ax2.plot(df['timestamp'], df['ebm_nll'], color='tab:red', label='ebm_nll')
+    ax2.legend(loc='upper right')
 
   # Save the plot as a PNG file
   plt.savefig(time_output)
@@ -246,16 +247,26 @@ def log(args, log_entry, epoch, timestamp):
   print(f'logged epoch {epoch} to log file')
 
 def log_completion(method, data, args):
-  if os.path.exists(args.index_path) and os.path.getsize(args.index_path) > 0:
-    try:
-        with open(args.index_path, 'r') as file:
-            experiment_idx = json.load(file)
-    except json.JSONDecodeError:
-        print("Warning: JSON file is corrupted. Cannot log completion.")
-    experiment_idx[args.exp_n]['completed'] = True
-    with open(args.index_path, 'w') as file:
-      json.dump(experiment_idx, file, indent=4)
-    print(f'Completion logged.')
+  lock_file_path = f"{args.index_path}.lock"
+  lock = FileLock(lock_file_path, timeout=10)
+
+  try:
+    with lock:
+      if os.path.exists(args.index_path) and os.path.getsize(args.index_path) > 0:
+        try:
+            with open(args.index_path, 'r') as file:
+                experiment_idx = json.load(file)
+        except json.JSONDecodeError:
+            print("Warning: JSON file is corrupted. Cannot log completion.")
+        experiment_idx[str(args.exp_n)]['completed'] = True
+        with open(args.index_path, 'w') as file:
+          json.dump(experiment_idx, file, indent=4)
+        print(f'Completion logged.')
+  except Timeout:
+    print(f"Could not acquire the lock on {args.index_path} after 10 seconds.")
+
+  except Exception as e:
+    print(f"An error occurred: {e}")  
 
 
 def convert_namespace_to_dict(args):
@@ -269,32 +280,49 @@ def convert_namespace_to_dict(args):
     return args_dict
 
 def log_args(method, data, args):
-  if os.path.exists(args.index_path) and os.path.getsize(args.index_path) > 0:
-      try:
-          with open(args.index_path, 'r') as file:
-              experiment_idx = json.load(file)
-      except json.JSONDecodeError:
-          print("Warning: JSON file is corrupted. Aborting.")
-          sys.exit(1)
-  else:
-      experiment_idx = {}
+  lock_file_path = f"{args.index_path}.lock"
+  lock = FileLock(lock_file_path, timeout=10)
 
-  experiment_number = 0
-  # if not method in experiment_idx.keys():
-  #   experiment_idx[method] = {}
-  # if not data in experiment_idx[method].keys():
-  #   experiment_idx[method][data] = {}
-  while True:
-    if str(experiment_number) in experiment_idx.keys():
-        experiment_number += 1
-    else:
-        break
-  args.exp_n = experiment_number
-  args.exp_id = f'{method}_{data}_{experiment_number}'
-  experiment_idx[args.exp_n] = convert_namespace_to_dict(args)
+  try:
+    with lock:
+      if os.path.exists(args.index_path) and os.path.getsize(args.index_path) > 0:
+          try:
+              with open(args.index_path, 'r') as file:
+                  experiment_idx = json.load(file)
+          except json.JSONDecodeError:
+              print("Warning: JSON file is corrupted. Aborting.")
+              sys.exit(1)
+      else:
+          experiment_idx = {}
 
-  with open(args.index_path, 'w') as file:
-      json.dump(experiment_idx, file, indent=4)
+      experiment_number = 0
+      # if not method in experiment_idx.keys():
+      #   experiment_idx[method] = {}
+      # if not data in experiment_idx[method].keys():
+      #   experiment_idx[method][data] = {}
+      while True:
+        if str(experiment_number) in experiment_idx.keys():
+            experiment_number += 1
+        else:
+            break
+      args.exp_n = experiment_number
+      args.exp_id = f'{method}_{data}_{experiment_number}'
+
+      args.ckpt_path = f'{args.save_dir}/{args.data_name}_{args.exp_n}/ckpts/'
+      args.plot_path = f'{args.save_dir}/{args.data_name}_{args.exp_n}/plots/'
+      args.sample_path = f'{args.save_dir}/{args.data_name}_{args.exp_n}/samples/'
+      args.log_path = f'{args.save_dir}/{args.data_name}_{args.exp_n}/log.csv'
+
+      experiment_idx[args.exp_n] = convert_namespace_to_dict(args)
+
+      with open(args.index_path, 'w') as file:
+          json.dump(experiment_idx, file, indent=4)
+  except Timeout:
+    print(f"Could not acquire the lock on {args.index_path} after 10 seconds.")
+
+  except Exception as e:
+    print(f"An error occurred: {e}")
 
   print(f"Experiment meta data saved to {args.index_path}")
+  return args
 

@@ -4,10 +4,13 @@ import shutil
 import argparse
 import json
 import numpy as np
+import datetime
 
 from utils import utils
 from utils.eval import log_args
 from methods.eb_gfn.train import main_loop as eb_gfn_main_loop
+from methods.gfn.train import main_loop as gfn_main_loop
+
 
 def convert_namespace_to_dict(args):
     args_dict = vars(args).copy()  # Convert Namespace to dictionary
@@ -24,7 +27,8 @@ def get_args():
     
     parser.add_argument('--methods', type=str, default='eb_gfn', 
         choices=[
-            'eb_gfn'
+            'eb_gfn',
+            'gfn'
         ],
     )
 
@@ -78,6 +82,9 @@ def get_args():
     parser.add_argument("--intermediate_ais_samples", type=int, default=10000)
     parser.add_argument("--final_ais_num_steps", type=int, default=1000)
     parser.add_argument("--intermediate_ais_num_steps", type=int, default=100)
+    parser.add_argument('--gibbs_num_rounds', type=int, default=100)
+
+    parser.add_argument('--pretrained_ebm', type=str, default='imaginary file')
 
     args = parser.parse_args()
 
@@ -110,7 +117,7 @@ def get_args():
     device = args.device
 
     #set paths
-    args.save_dir = f'./methods/{args.methods}/experiments/{args.data_name}/'
+    args.save_dir = f'./methods/{args.methods}/experiments/{args.data_name}'
     os.makedirs(args.save_dir, exist_ok=True)
 
     # experiment_idx_path = f'{args.save_dir}/experiment_idx.json'
@@ -132,14 +139,11 @@ def get_args():
     #         break
     args.completed = False
 
+    start_time = datetime.datetime.now()
+    args.start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
+
     args.index_path = f'{args.save_dir}/experiment_idx.json'
     log_args(args.methods, args.data_name, args)
-    
-    args.ckpt_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/ckpts/'
-    args.plot_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/plots/'
-    args.sample_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/samples/'
-    args.log_path = f'{args.save_dir}/{args.data_name}_{args.exp_id}/log.csv'
-    
 
     if os.path.exists(args.ckpt_path):
         print(f'removed checkpoint data that was not indexed')
@@ -160,8 +164,6 @@ def get_args():
     #     json.dump(experiment_idx, file, indent=4)
 
     # print(f"Experiment meta data saved to {args.save_dir}experiment_idx.json")
-
-    log_args(args.methods, args.data_name, args)
 
     # print("Device:" + str(device))
     # print("Args:" + str(args))

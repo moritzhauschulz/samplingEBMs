@@ -50,9 +50,9 @@ def main_loop(db, args, verbose=False):
     model = EBM(net).to(args.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     
-    for epoch in range(args.num_epochs):
+    for epoch in range(1,args.num_epochs + 1):
         model.train()
-        pbar = tqdm(range(args.iter_per_epoch)) if verbose else range(args.iter_per_epoch)
+        pbar = tqdm(range(args.surrogate_iter_per_epoch)) if verbose else range(args.surrogate_iter_per_epoch)
 
         for it in pbar:
             samples = get_batch_data(db, args)
@@ -71,7 +71,7 @@ def main_loop(db, args, verbose=False):
             if verbose:
                 pbar.set_description(f'Epoch {epoch} Iter {it} Loss {loss.item()}')
 
-        if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs - 1):
+        if (epoch % args.eval_every == 0) or (epoch == args.num_epochs - 1):
             torch.save(model.state_dict(), f'{args.ckpt_path}/model_{epoch}.pt')
 
             if args.vocab_size == 2:

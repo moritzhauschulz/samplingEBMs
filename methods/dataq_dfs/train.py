@@ -170,7 +170,7 @@ def main_loop(db, args, verbose=False):
 
         pbar.set_description(f'Epoch {epoch}')
 
-
+    
     make_plots(args.log_path)
     log_completion(args.methods, args.data_name, args)
 
