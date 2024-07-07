@@ -158,6 +158,9 @@ def get_args():
         shutil.rmtree(args.sample_path)
     os.makedirs(args.sample_path, exist_ok=True)
 
+    print(f'Saving experiment data to {args.save_dir}/{args.data_name}_{args.exp_n}')
+
+
     # Save the updated experiment index to the file
     # experiment_idx[args.idx] = convert_namespace_to_dict(args)
     # with open(experiment_idx_path, 'w') as file:

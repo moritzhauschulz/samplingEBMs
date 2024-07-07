@@ -34,11 +34,13 @@ samples = utils.get_batch_data(db, my_args, batch_size=10000)
 float_samples = utils.bin2float(samples.astype(np.int32), my_args.inv_bm, my_args.discrete_dim, my_args.int_scale)
 utils.plot_samples(float_samples, './samples_plot.png')
 
-mean = np.mean(samples, axis=0)
+mean = np.ones(samples.shape[1]) / 2
 print(mean)
-q_dist = MixtureModel(samples, mean, 0.75, device='cuda')
+q_dist = MixtureModel(samples, mean, 0.5, device='cuda')
 
-mixed_samples = q_dist.sample(1000).detach().cpu().numpy()
-mixed_float_samples = utils.bin2float(mixed_samples.astype(np.int32), my_args.inv_bm, my_args.discrete_dim, my_args.int_scale)
+mixed_samples = q_dist.sample(1000)
+mixed_float_samples = utils.bin2float(mixed_samples.detach().cpu().numpy().astype(np.int32), my_args.inv_bm, my_args.discrete_dim, my_args.int_scale)
 
 utils.plot_samples(mixed_float_samples, './mixed_samples_plot.png')
+
+print(q_dist.likelihood(mixed_samples))

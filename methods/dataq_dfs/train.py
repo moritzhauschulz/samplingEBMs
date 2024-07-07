@@ -11,10 +11,10 @@ from torch.distributions.categorical import Categorical
 import pickle
 import time
 
-from model import MixtureModel
 from utils import utils
 from methods.cd_runi_inter.model import MLPScore, EBM
 from methods.cd_runi_inter.model import MLPModel as MLPFlow
+from methods.dataq_dfs.model import MixtureModel
 from utils import sampler
 from utils.eval import ebm_evaluation
 from utils.eval import sampler_evaluation
@@ -84,7 +84,7 @@ def compute_loss(ebm_model, dfs_model, q_dist, xt, x1, t, args):
     loss = loss.sum(dim=(1,2))
 
     energy = torch.exp(-ebm_model(x1.float()))
-    q_density = q_dist.log_prob(x1.float()).sum(dim=-1).exp()
+    q_density = q_dist.likelihood(x1.float())
     loss = (energy / q_density * loss).mean(dim=0)
     
     return loss
@@ -94,7 +94,7 @@ def main_loop(db, args, verbose=False):
 
     samples = get_batch_data(db, args, batch_size=10000)
     mean = np.mean(samples, axis=0)
-    q_dist = MixtureModel(samples, mean, 0.25, device=args.device)
+    q_dist = MixtureModel(samples, mean, args.mixture, device=args.device)
 
     net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
     #ebm_model = EBM(net, torch.from_numpy(mean)).to(args.device)

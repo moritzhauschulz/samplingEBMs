@@ -7,6 +7,9 @@ methods/runidb/results/
 methods/punidb_noise=1/results/
 methods/punidb_noise=0/results/
 methods/punidb/results/
+methods/punidb_noise=1/results/
+methods/punidb_noise=0/results/
+methods/punidb/results/
 methods/ed_ebm/ckpts/
 methods/ebm_runidb/results/   
 methods/cd_ebm/results/       
@@ -27,6 +30,8 @@ EB_GFN_full_repo/__pycache__/
 EB_GFN_full_repo/synthetic/__pycache__
 EB_GFN_full_repo/synthetic/test
 methods/eb_gfn/experiments/
+methods/dataq_dfs/experiments/
+methods/gfn/experiments/
 
 #env
 myenv

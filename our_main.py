@@ -16,6 +16,8 @@ from methods.ebm_runidb.train import main_loop as ebm_runidb_main_loop
 
 from methods.cd_ebm.train import main_loop as cd_ebm_main_loop
 from methods.cd_runi_inter.train import main_loop as cd_runi_inter_main_loop
+from methods.dataq_dfs.train import main_loop as dataq_dfs_main_loop
+
 # def convert_namespace_to_dict(args):
 #     args_dict = vars(args).copy()  # Convert Namespace to dictionary
 #     # Handle non-serializable objects
@@ -34,7 +36,8 @@ def get_args():
         choices=[
             'punidb', 'runidb',
             'ed_ebm', 'ebm_runidb',
-            'cd_ebm', 'cd_runi_inter'
+            'cd_ebm', 'cd_runi_inter',
+            'dataq_dfs'
         ],
     )
 
@@ -73,6 +76,7 @@ def get_args():
     parser.add_argument("--intermediate_ais_samples", type=int, default=10000)
     parser.add_argument("--final_ais_num_steps", type=int, default=1000)
     parser.add_argument("--intermediate_ais_num_steps", type=int, default=100)
+    parser.add_argument("--mixture", type=float, default=1)
     parser.add_argument('--pretrained_ebm', type=str, default='imaginary file')
 
 
@@ -145,6 +149,8 @@ def get_args():
         print(f'removed sample data that was not indexed')
         shutil.rmtree(args.sample_path)
     os.makedirs(args.sample_path, exist_ok=True)
+
+    print(f'Saving experiment data to {args.save_dir}/{args.data_name}_{args.exp_n}')
 
     # Save the updated experiment index to the file
     # experiment_idx[args.idx] = convert_namespace_to_dict(args)

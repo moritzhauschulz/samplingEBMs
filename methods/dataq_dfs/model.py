@@ -26,11 +26,9 @@ class MixtureModel:
         # Sample from empirical distribution
         empirical_indices = np.random.choice(self.empirical_samples.shape[0], size=num_empirical, replace=True)
         empirical_samples = self.empirical_samples[empirical_indices]
-        print(empirical_samples.shape)
         
         # Sample from Bernoulli distribution
         bernoulli_samples = self.bernoulli_dist.sample((num_bernoulli,))
-        print(bernoulli_samples.shape)
         
         # Combine the samples
         combined_samples = torch.cat([empirical_samples, bernoulli_samples])
@@ -39,13 +37,15 @@ class MixtureModel:
         
         return combined_samples
     
-    def empirical_likelihood(self, sample):
-        count = torch.sum(torch.all(self.empirical_samples == sample, dim=1)).item()
+    def empirical_likelihood(self, samples):
+        samples = samples.to(self.device)
+        matches = (self.empirical_samples.unsqueeze(0) == samples.unsqueeze(1)).all(dim=-1).float()
+        count = matches.sum(dim=1)  # Count the matches for each sample in the batch
         return count / len(self.empirical_samples)
     
     def bernoulli_likelihood(self, sample):
         sample_tensor = sample.to(self.device)
-        return torch.exp(self.bernoulli_dist.log_prob(sample_tensor)).prod().item()
+        return torch.exp(self.bernoulli_dist.log_prob(sample_tensor).sum(dim=-1))
     
     def likelihood(self, sample):
         sample_tensor = sample.to(self.device)
