@@ -154,7 +154,7 @@ def main_loop(db, args, verbose=False):
             log_entry['sampler_mmd'] = sampler_evaluation(args, db, lambda x: torch.from_numpy(gen_samples(dfs_model, args, batch_size=x)))
             log_entry['sampler_ebm_mmd'] = sampler_ebm_evaluation(args, db, lambda x: torch.from_numpy(gen_samples(dfs_model, args, batch_size=x)), ebm_model)
         
-            samples = gen_samples(dfs_model, args, batch_size=args.batch_size * 10)
+            samples = gen_samples(dfs_model, args, batch_size=2500)
             if args.vocab_size == 2:
                 float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
             else:

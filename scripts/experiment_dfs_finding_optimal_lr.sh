@@ -35,12 +35,13 @@ echo "Starting job ${JOB_BASE_NAME} with ID $SLURM_JOB_ID"
 echo "Job started at $(date)"
 
 ############# SPECIFY JOB BELOW ################
-
-python baselines_main.py --method gfn --pretrained_ebm methods/ed_ebm/experiments/2spirals/2spirals_2/ckpts/model_100000.pt --data_name 2spirals --n_iters 100000 --lr 1e-3 --type tblb --hid_layer 3 --hid 256 --print_every 2500 --eval_every 2500 --glr 1e-3 --zlr 1 --rand_coef 0 > ${output_files}_output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods ebm_runidb --pretrained_ebm methods/ed_ebm/experiments/2spirals/2spirals_2/ckpts/model_100000.pt --gpu 0 --vocab_size 2 --eval_every 2500 --num_epochs 100000 --batch_size 128 --delta_t 0.01 --dfs_lr 0.00001 --eta 1 > ${output_files}_output1.log 2>&1 &
+python our_main.py --data_name 2spirals --methods ebm_runidb --pretrained_ebm methods/ed_ebm/experiments/2spirals/2spirals_2/ckpts/model_100000.pt --gpu 0 --vocab_size 2 --eval_every 2500 --num_epochs 100000 --batch_size 128 --delta_t 0.01 --dfs_lr 0.0001 --eta 1 > ${output_files}_output2.log 2>&1 &
+python our_main.py --data_name 2spirals --methods ebm_runidb --pretrained_ebm methods/ed_ebm/experiments/2spirals/2spirals_2/ckpts/model_100000.pt --gpu 0 --vocab_size 2 --eval_every 2500 --num_epochs 100000 --batch_size 128 --delta_t 0.01 --dfs_lr 0.001 --eta 1 > ${output_files}_output3.log 2>&1 &
+python our_main.py --data_name 2spirals --methods ebm_runidb --pretrained_ebm methods/ed_ebm/experiments/2spirals/2spirals_2/ckpts/model_100000.pt --gpu 0 --vocab_size 2 --eval_every 2500 --num_epochs 100000 --batch_size 128 --delta_t 0.01 --dfs_lr 0.01 --eta 1  > ${output_files}_output4.log  2>&1 &
 wait
 
 ############# SPECIFY JOB ABOVE ################
-
 echo "Job finished at $(date)"
 
 uptime

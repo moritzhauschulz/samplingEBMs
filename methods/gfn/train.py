@@ -178,7 +178,7 @@ def main_loop(db, args):
 
             if args.vocab_size == 2:
                 # utils.plot_heat(energy_model, db.f_scale, bm, f'{args.plot_path}ebm_heat_{itr + 1}.png', args)
-                gfn_samples = gfn.sample(4000).detach()
+                gfn_samples = gfn.sample(2500).detach()
                 gfn_samp_float = utils.bin2float(gfn_samples.data.cpu().numpy().astype(int), inv_bm, args.discrete_dim, args.int_scale)
                 utils.plot_samples(gfn_samp_float, f'{args.sample_path}gfn_samples_{itr + 1}.png', im_size=4.1, im_fmt='png')
 

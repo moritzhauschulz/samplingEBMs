@@ -204,7 +204,7 @@ def main_loop(db, args, verbose=False):
                 utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}ebm_heat_{epoch}.png', args)
                 utils.plot_sampler(ebm_model, f'{args.sample_path}ebm_samples_{epoch}.png', args)
             
-            samples = gen_samples(dfs_model, args, batch_size=args.batch_size * 10)
+            samples = gen_samples(dfs_model, args, batch_size=2500)
             if args.vocab_size == 2:
                 float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
             else:
