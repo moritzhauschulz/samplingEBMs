@@ -200,17 +200,6 @@ def main_loop(db, args, verbose=False):
             log_entry['sampler_mmd'] = sampler_evaluation(args, db, lambda x: torch.from_numpy(gen_samples(dfs_model, args, batch_size=x)))
             log_entry['sampler_ebm_mmd'] = sampler_ebm_evaluation(args, db, lambda x: torch.from_numpy(gen_samples(dfs_model, args, batch_size=x)), ebm_model)
             
-            if args.vocab_size == 2:
-                utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}ebm_heat_{epoch}.png', args)
-                utils.plot_sampler(ebm_model, f'{args.sample_path}ebm_samples_{epoch}.png', args)
-            
-            samples = gen_samples(dfs_model, args, batch_size=2500)
-            if args.vocab_size == 2:
-                float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
-            else:
-                float_samples = utils.ourbase2float(samples.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
-            utils.plot_samples(float_samples, f'{args.sample_path}dfs_sample_{epoch}.png', im_size=4.1, im_fmt='png')
-
             torch.save(dfs_model.state_dict(), f'{args.ckpt_path}dfs_model_{epoch}.pt')
             torch.save(ebm_model.state_dict(), f'{args.ckpt_path}ebm_model_{epoch}.pt')
 
@@ -223,7 +212,25 @@ def main_loop(db, args, verbose=False):
             timestamp = time.time() - cum_eval_time - start_time
 
             log(args, log_entry, epoch, timestamp)
+
+        if (epoch) % args.plot_every == 0 or epoch == args.num_epochs:
+            eval_start_time = time.time()
+
+            if args.vocab_size == 2:
+                utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}ebm_heat_{epoch}.png', args)
+                utils.plot_sampler(ebm_model, f'{args.sample_path}ebm_samples_{epoch}.png', args)
             
+            samples = gen_samples(dfs_model, args, batch_size=2500)
+            if args.vocab_size == 2:
+                float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
+            else:
+                float_samples = utils.ourbase2float(samples.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
+            utils.plot_samples(float_samples, f'{args.sample_path}dfs_sample_{epoch}.png', im_size=4.1, im_fmt='png')
+
+            eval_end_time = time.time()
+            eval_time = eval_end_time - eval_start_time
+            cum_eval_time += eval_time
+
             
 
         pbar.set_description(f'Epoch {epoch}')

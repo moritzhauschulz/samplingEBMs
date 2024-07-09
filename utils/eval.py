@@ -1,5 +1,6 @@
 import torch
 import os
+import statistics
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -44,74 +45,102 @@ def ais_mcmc_step(args, x, energy_fn, step_size=0.1):
     x[accept] = x_new[accept]
     return x
 
-def make_plots(log_path, output_dir=''):
 
-  folder_path = os.path.dirname(log_path)
 
-  if output_dir == '':
-    epochs_output = folder_path + '/metrics_over_epochs.png'
-    time_output = folder_path + '/metrics_over_time.png'
-  else: 
-    epochs_output = output_dir + '/metrics_over_epochs.png'
-    time_output = output_dir + '/metrics_over_time.png'
+def make_plots(log_path, output_dir='', reference_value=None, last_n=5):
 
-  # Read the CSV file
-  df = pd.read_csv(log_path)
+    folder_path = os.path.dirname(log_path)
 
-  # Extract metrics dynamically from the first line (excluding 'epoch' and 'timestamp')
-  metrics = df.columns[2:]  # Exclude 'epoch' and 'timestamp'
+    if output_dir == '':
+        epochs_output = folder_path + '/metrics_over_epochs.png'
+        time_output = folder_path + '/metrics_over_time.png'
+    else: 
+        epochs_output = output_dir + '/metrics_over_epochs.png'
+        time_output = output_dir + '/metrics_over_time.png'
 
-  # Plot metrics over epochs and save as PNG
-  fig, ax1 = plt.subplots(figsize=(12, 6))
+    # Read the CSV file
+    df = pd.read_csv(log_path)
 
-  ax1.set_xlabel('Epoch')
-  ax1.set_ylabel('Value')
-  ax1.set_title('Metrics over Epochs')
+    # Extract metrics dynamically from the first line (excluding 'epoch' and 'timestamp')
+    metrics = df.columns[2:]  # Exclude 'epoch' and 'timestamp'
 
-  # Plot other metrics on the left y-axis
-  for metric in metrics:
-      if metric != 'ebm_nll':
-          ax1.plot(df['epoch'], df[metric], label=metric)
+    def add_averages_text(ax, df, metrics):
+        avg_text = f"Average of last {last_n} datapoints\n"
+        for metric in metrics:
+            avg_value = df[metric].tail(last_n).mean()
+            avg_text += f"{metric}: {avg_value:.5f}\n"
+        
+        # Add text box to the plot
+        ax.text(0.95, 0.95, avg_text, transform=ax.transAxes, fontsize=10,
+                verticalalignment='top', horizontalalignment='right',
+                bbox=dict(facecolor='white', alpha=0.5))
 
-  ax1.grid(True)
-  ax1.legend(loc='upper left')
+    # Plot metrics over epochs and save as PNG
+    fig, ax1 = plt.subplots(figsize=(12, 6))
 
-  # Create a second y-axis for the main metric
-  if 'ebm_nll' in metrics:
-    ax2 = ax1.twinx()
-    ax2.set_ylabel('ebm_nll')
-    ax2.plot(df['epoch'], df['ebm_nll'], color='tab:red', label='ebm_nll')
-    ax2.legend(loc='upper right')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Value')
+    ax1.set_title('Metrics over Epochs')
 
-  # Save the plot as a PNG file
-  plt.savefig(epochs_output)
-  plt.show()
+    # Plot other metrics on the left y-axis
+    for metric in metrics:
+        if metric != 'ebm_nll':
+            ax1.plot(df['epoch'], df[metric], label=metric)
 
-  # Plot metrics over time and save as PNG
-  fig, ax1 = plt.subplots(figsize=(12, 6))
+    # Add a dotted horizontal line for the reference value
+    if reference_value is not None:
+        ax1.axhline(y=reference_value, color='gray', linestyle='--', label=f'Reference value at {reference_value}')
 
-  ax1.set_xlabel('Timestamp')
-  ax1.set_ylabel('Value')
-  ax1.set_title('Metrics over Time')
+    ax1.grid(True)
+    ax1.legend(loc='upper left')
 
-  # Plot other metrics on the left y-axis
-  for metric in metrics:
-      if metric != 'ebm_nll':
-          ax1.plot(df['timestamp'], df[metric], label=metric)
+    # Create a second y-axis for the main metric
+    if 'ebm_nll' in metrics:
+        ax2 = ax1.twinx()
+        ax2.set_ylabel('ebm_nll')
+        ax2.plot(df['epoch'], df['ebm_nll'], color='tab:red', label='ebm_nll')
+        ax2.legend(loc='lower right')
 
-  ax1.grid(True)
-  ax1.legend(loc='upper left')
+    # Add averages text
+    add_averages_text(ax1, df, metrics)
 
-  # Create a second y-axis for the main metric
-  if 'ebm_nll' in metrics:
-    ax2 = ax1.twinx()
-    ax2.set_ylabel('ebm_nll')
-    ax2.plot(df['timestamp'], df['ebm_nll'], color='tab:red', label='ebm_nll')
-    ax2.legend(loc='upper right')
+    # Save the plot as a PNG file
+    plt.savefig(epochs_output)
+    plt.show()
 
-  # Save the plot as a PNG file
-  plt.savefig(time_output)
-  plt.show()
+    # Plot metrics over time and save as PNG
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+
+    ax1.set_xlabel('Timestamp')
+    ax1.set_ylabel('Value')
+    ax1.set_title('Metrics over Time')
+
+    # Plot other metrics on the left y-axis
+    for metric in metrics:
+        if metric != 'ebm_nll':
+            ax1.plot(df['timestamp'], df[metric], label=metric)
+
+    # Add a dotted horizontal line for the reference value
+    if reference_value is not None:
+        ax1.axhline(y=reference_value, color='gray', linestyle='--', label=f'Reference value at {reference_value}')
+
+    ax1.grid(True)
+    ax1.legend(loc='upper left')
+
+    # Create a second y-axis for the main metric
+    if 'ebm_nll' in metrics:
+        ax2 = ax1.twinx()
+        ax2.set_ylabel('ebm_nll')
+        ax2.plot(df['timestamp'], df['ebm_nll'], color='tab:red', label='ebm_nll')
+        ax2.legend(loc='lower right')
+
+    # Add averages text
+    add_averages_text(ax1, df, metrics)
+
+    # Save the plot as a PNG file
+    plt.savefig(time_output)
+    plt.show()
+
 
 def annealed_importance_sampling(args, score_fn, num_samples, num_intermediate, num_mcmc_steps, latent_dim):
     gc.collect()
@@ -221,6 +250,30 @@ def sampler_evaluation(args, db, sampler_function, write_to_index=True, batch_si
   print(f'Exponential Hamming MMD of SAMPLER against data on 10x{batch_size} samples: {mmd}')
   
   return mmd.item()
+
+def compute_mmd_base_stats(args, N, db, write_to_index=True, batch_size=4000):
+
+  #computes variance and mean in mmd over N computations – should be used to judge the size of mmd in experiments
+  mmd_outer_list = []
+  pbar = tqdm(range(N))
+  for i in pbar:
+    mmd_inner_list = []
+    for _ in range(10):
+      y_1 = get_batch_data(db, args, batch_size=batch_size)
+      y_1 = torch.from_numpy(np.float32(y_1)).to('cpu')
+      y_2 = get_batch_data(db, args, batch_size=batch_size)
+      y_2 = torch.from_numpy(np.float32(y_2)).to('cpu')
+      mmd_inner_list.append(exp_hamming_mmd(y_1,y_2))
+    mmd = sum(mmd_inner_list)/10
+    mmd_outer_list.append(mmd.item())
+    pbar.set_description(f'Computed {i}/{N} MMDs')
+  var_mmd = statistics.variance(mmd_outer_list)
+  mean_mmd = statistics.mean(mmd_outer_list)
+
+
+  print(f'MMD variance and mean over {N} computations were {var_mmd} and {mean_mmd}')
+  
+  return mean_mmd, var_mmd
 
 def sampler_ebm_evaluation(args, db, sampler_function, ebm, write_to_index=True, batch_size=4000):
   #note: there is no immedaite way to obtain NLL for DFS – this would require sampling a backward trajectory...

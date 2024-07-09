@@ -32,6 +32,7 @@ EB_GFN_full_repo/synthetic/test
 methods/eb_gfn/experiments/
 methods/dataq_dfs/experiments/
 methods/gfn/experiments/
+methods/dataq_dfs_ebm/
 
 #env
 myenv

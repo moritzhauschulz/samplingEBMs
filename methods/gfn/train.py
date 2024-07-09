@@ -176,12 +176,7 @@ def main_loop(db, args):
             log_entry['sampler_mmd'] = sampler_evaluation(args, db, lambda x: gfn.sample(x))
             log_entry['sampler_ebm_mmd'] = sampler_ebm_evaluation(args, db, lambda x: gfn.sample(x), energy_model)
 
-            if args.vocab_size == 2:
-                # utils.plot_heat(energy_model, db.f_scale, bm, f'{args.plot_path}ebm_heat_{itr + 1}.png', args)
-                gfn_samples = gfn.sample(2500).detach()
-                gfn_samp_float = utils.bin2float(gfn_samples.data.cpu().numpy().astype(int), inv_bm, args.discrete_dim, args.int_scale)
-                utils.plot_samples(gfn_samp_float, f'{args.sample_path}gfn_samples_{itr + 1}.png', im_size=4.1, im_fmt='png')
-
+]
             # torch.save(energy_model.state_dict(), f'{args.ckpt_path}ebm_model_{itr + 1}.pt')
             torch.save(gfn.model.state_dict(), f'{args.ckpt_path}gfn_model_{itr + 1}.pt')
             
@@ -191,6 +186,20 @@ def main_loop(db, args):
             timestamp = time.time() - cum_eval_time - start_time
 
             log(args, log_entry, itr + 1, timestamp)
+
+        if (itr + 1) % args.plot_every == 0 or (itr + 1) == args.n_iters:
+            eval_start_time = time.time()
+            
+            if args.vocab_size == 2:
+                # utils.plot_heat(energy_model, db.f_scale, bm, f'{args.plot_path}ebm_heat_{itr + 1}.png', args)
+                gfn_samples = gfn.sample(2500).detach()
+                gfn_samp_float = utils.bin2float(gfn_samples.data.cpu().numpy().astype(int), inv_bm, args.discrete_dim, args.int_scale)
+                utils.plot_samples(gfn_samp_float, f'{args.sample_path}gfn_samples_{itr + 1}.png', im_size=4.1, im_fmt='png')
+
+            eval_end_time = time.time()
+            eval_time = eval_end_time - eval_start_time
+            cum_eval_time += eval_time
+
 
         itr += 1
 

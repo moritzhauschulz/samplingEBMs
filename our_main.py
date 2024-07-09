@@ -8,6 +8,7 @@ import datetime
 
 from utils import utils
 from utils.eval import log_args
+from utils.eval import compute_mmd_base_stats
 from methods.runidb.train import main_loop as runidb_main_loop
 from methods.punidb.train import main_loop as punidb_main_loop
 
@@ -17,6 +18,7 @@ from methods.ebm_runidb.train import main_loop as ebm_runidb_main_loop
 from methods.cd_ebm.train import main_loop as cd_ebm_main_loop
 from methods.cd_runi_inter.train import main_loop as cd_runi_inter_main_loop
 from methods.dataq_dfs.train import main_loop as dataq_dfs_main_loop
+from methods.dataq_dfs_ebm.train import main_loop as dataq_dfs_ebm_main_loop
 
 # def convert_namespace_to_dict(args):
 #     args_dict = vars(args).copy()  # Convert Namespace to dictionary
@@ -37,7 +39,7 @@ def get_args():
             'punidb', 'runidb',
             'ed_ebm', 'ebm_runidb',
             'cd_ebm', 'cd_runi_inter',
-            'dataq_dfs'
+            'dataq_dfs', 'dataq_dfs_ebm'
         ],
     )
 
@@ -61,7 +63,8 @@ def get_args():
     parser.add_argument('--num_epochs', default=1000, type=int, help='num epochs')
     parser.add_argument('--surrogate_iter_per_epoch', default=1, type=int, help='surrogate sampler: num iterations per epoch')
     parser.add_argument('--ebm_iter_per_epoch', default=1, type=int, help='ebm: num iterations per epoch')
-    parser.add_argument('--eval_every', type=int, default=1000)
+    parser.add_argument('--eval_every', type=int, default=5000)
+    parser.add_argument('--plot_every', type=int, default=2500)
     parser.add_argument('--experiment_name', default="", type=str, help='unique experiment name for meta data')
     parser.add_argument('--verbose', default=False, type=bool, help='evaluate final nll and mmd')
 
@@ -78,7 +81,7 @@ def get_args():
     parser.add_argument("--intermediate_ais_num_steps", type=int, default=100)
     parser.add_argument("--mixture", type=float, default=1)
     parser.add_argument('--pretrained_ebm', type=str, default='imaginary file')
-
+    parser.add_argument('--compute_mmd_base_stats', default=False, type=bool, help='compute mmd variance and mean as a benchmark')
 
     args = parser.parse_args()
 
@@ -129,28 +132,13 @@ def get_args():
     #         break
 
     args.completed = False
+    args.mmd_mean = None
+    args.mmd_var = None
 
     start_time = datetime.datetime.now()
     args.start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
 
     args.index_path = f'{args.save_dir}/experiment_idx.json'
-
-    log_args(args.methods, args.data_name, args)
-
-    if os.path.exists(args.ckpt_path):
-        print(f'removed checkpoint data that was not indexed')
-        shutil.rmtree(args.ckpt_path)
-    os.makedirs(args.ckpt_path, exist_ok=True)
-    if os.path.exists(args.plot_path):
-        print(f'removed plot data that was not indexed')
-        shutil.rmtree(args.plot_path)
-    os.makedirs(args.plot_path, exist_ok=True)
-    if os.path.exists(args.sample_path):
-        print(f'removed sample data that was not indexed')
-        shutil.rmtree(args.sample_path)
-    os.makedirs(args.sample_path, exist_ok=True)
-
-    print(f'Saving experiment data to {args.save_dir}/{args.data_name}_{args.exp_n}')
 
     # Save the updated experiment index to the file
     # experiment_idx[args.idx] = convert_namespace_to_dict(args)
@@ -180,9 +168,33 @@ if __name__ == '__main__':
         db, bm, inv_bm = utils.setup_data(args)
         args.bm = bm
         args.inv_bm = inv_bm
-        plot_binary_data_samples(db, args)
     else:
         db = utils.our_setup_data(args)
+
+    if args.compute_mmd_base_stats:
+        N = 25
+        args.mmd_mean, args.mmd_var = compute_mmd_base_stats(args, N, db)
+
+    log_args(args.methods, args.data_name, args)
+
+    if os.path.exists(args.ckpt_path):
+        print(f'removed checkpoint data that was not indexed')
+        shutil.rmtree(args.ckpt_path)
+    os.makedirs(args.ckpt_path, exist_ok=True)
+    if os.path.exists(args.plot_path):
+        print(f'removed plot data that was not indexed')
+        shutil.rmtree(args.plot_path)
+    os.makedirs(args.plot_path, exist_ok=True)
+    if os.path.exists(args.sample_path):
+        print(f'removed sample data that was not indexed')
+        shutil.rmtree(args.sample_path)
+    os.makedirs(args.sample_path, exist_ok=True)
+
+    print(f'Saving experiment data to {args.save_dir}/{args.data_name}_{args.exp_n}')
+
+    if args.vocab_size == 2:
+        plot_binary_data_samples(db, args)
+    else:
         plot_categorical_data_samples(db, args)
 
     main_fn = eval(f'{args.methods}_main_loop')

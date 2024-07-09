@@ -8,6 +8,7 @@ import datetime
 
 from utils import utils
 from utils.eval import log_args
+from utils.eval import compute_mmd_base_stats
 from methods.eb_gfn.train import main_loop as eb_gfn_main_loop
 from methods.gfn.train import main_loop as gfn_main_loop
 
@@ -46,7 +47,8 @@ def get_args():
     parser.add_argument('--n_iters', "--ni", type=int, default=100000)
     parser.add_argument('--batch_size', "--bs", type=int, default=128)
     parser.add_argument('--print_every', "--pe", type=int, default=100)
-    parser.add_argument('--eval_every', type=int, default=1000)
+    parser.add_argument('--eval_every', type=int, default=5000)
+    parser.add_argument('--plot_every', type=int, default=2500)
     parser.add_argument('--lr', type=float, default=.0001)
     parser.add_argument("--ebm_every", "--ee", type=int, default=1, help="EBM training frequency")
 
@@ -138,27 +140,13 @@ def get_args():
     #     else:
     #         break
     args.completed = False
+    args.mmd_mean = None
+    args.mmd_var = None
 
     start_time = datetime.datetime.now()
     args.start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
 
     args.index_path = f'{args.save_dir}/experiment_idx.json'
-    log_args(args.methods, args.data_name, args)
-
-    if os.path.exists(args.ckpt_path):
-        print(f'removed checkpoint data that was not indexed')
-        shutil.rmtree(args.ckpt_path)
-    os.makedirs(args.ckpt_path, exist_ok=True)
-    if os.path.exists(args.plot_path):
-        print(f'removed plot data that was not indexed')
-        shutil.rmtree(args.plot_path)
-    os.makedirs(args.plot_path, exist_ok=True)
-    if os.path.exists(args.sample_path):
-        print(f'removed sample data that was not indexed')
-        shutil.rmtree(args.sample_path)
-    os.makedirs(args.sample_path, exist_ok=True)
-
-    print(f'Saving experiment data to {args.save_dir}/{args.data_name}_{args.exp_n}')
 
 
     # Save the updated experiment index to the file
@@ -194,6 +182,32 @@ if __name__ == '__main__':
         plot_binary_data_samples(db, args)
     else:
         db = utils.our_setup_data(args)
+        plot_categorical_data_samples(db, args)
+
+    if args.compute_mmd_base_stats:
+        N = 25
+        args.mmd_mean, args.mmd_var = compute_mmd_base_stats(args, N, db)
+
+    log_args(args.methods, args.data_name, args)
+
+    if os.path.exists(args.ckpt_path):
+        print(f'removed checkpoint data that was not indexed')
+        shutil.rmtree(args.ckpt_path)
+    os.makedirs(args.ckpt_path, exist_ok=True)
+    if os.path.exists(args.plot_path):
+        print(f'removed plot data that was not indexed')
+        shutil.rmtree(args.plot_path)
+    os.makedirs(args.plot_path, exist_ok=True)
+    if os.path.exists(args.sample_path):
+        print(f'removed sample data that was not indexed')
+        shutil.rmtree(args.sample_path)
+    os.makedirs(args.sample_path, exist_ok=True)
+
+    print(f'Saving experiment data to {args.save_dir}/{args.data_name}_{args.exp_n}')
+
+    if args.vocab_size == 2:
+        plot_binary_data_samples(db, args)
+    else:
         plot_categorical_data_samples(db, args)
 
     main_fn = eval(f'{args.methods}_main_loop')
