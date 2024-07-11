@@ -20,17 +20,6 @@ from methods.cd_runi_inter.train import main_loop as cd_runi_inter_main_loop
 from methods.dataq_dfs.train import main_loop as dataq_dfs_main_loop
 from methods.dataq_dfs_ebm.train import main_loop as dataq_dfs_ebm_main_loop
 
-# def convert_namespace_to_dict(args):
-#     args_dict = vars(args).copy()  # Convert Namespace to dictionary
-#     # Handle non-serializable objects
-#     for key, value in args_dict.items():
-#         if isinstance(value, torch.device):
-#             args_dict[key] = str(value)
-#     args_dict.pop('bm', None)
-#     args_dict.pop('inv_bm', None)
-#     return args_dict
-
-
 def get_args():
     parser = argparse.ArgumentParser(description='Pipeline')
 
