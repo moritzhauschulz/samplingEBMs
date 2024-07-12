@@ -82,14 +82,16 @@ def main_loop(db, args):
     while itr < args.n_iters:
         st = time.time()
 
-        x = get_batch_data(db, args)
-        x = torch.from_numpy(np.float32(x)).to(args.device)
-        update_success_rate = -1.
-        gfn.model.train()
-        train_loss, train_logZ = gfn.train(batch_size,
-                scorer=lambda inp: -1 * energy_model(inp).detach(), silent=itr % args.print_every != 0, data=x,
-                back_ratio=args.back_ratio)
+        for i in range(ebm_every):
+            x = get_batch_data(db, args)
+            x = torch.from_numpy(np.float32(x)).to(args.device)
+            update_success_rate = -1.
+            gfn.model.train()
+            train_loss, train_logZ = gfn.train(batch_size,
+                    scorer=lambda inp: -1 * energy_model(inp).detach(), silent=itr % args.print_every != 0, data=x,
+                    back_ratio=args.back_ratio)
 
+        x = get_batch_data(db, args)
         if args.rand_k or args.lin_k or (args.K > 0):
             if args.rand_k:
                 K = random.randrange(xdim) + 1
@@ -117,20 +119,20 @@ def main_loop(db, args):
             x_fake = gfn.sample(batch_size)
 
 
-        if itr % args.ebm_every == 0:
-            st = time.time() - st
+        # if itr % args.ebm_every == 0:
+        st = time.time() - st
 
-            energy_model.train()
-            logp_real = -1 * energy_model(x).squeeze()
+        energy_model.train()
+        logp_real = -1 * energy_model(x).squeeze()
 
-            logp_fake = -1 * energy_model(x_fake).squeeze()
-            obj = logp_real.mean() - logp_fake.mean()
-            l2_reg = (logp_real ** 2.).mean() + (logp_fake ** 2.).mean()
-            loss = -obj
+        logp_fake = -1 * energy_model(x_fake).squeeze()
+        obj = logp_real.mean() - logp_fake.mean()
+        l2_reg = (logp_real ** 2.).mean() + (logp_fake ** 2.).mean()
+        loss = -obj
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
         if itr % args.print_every == 0 or itr == args.n_iters - 1:
             print("({:5d}) | ({:.3f}s/iter) cur lr= {:.2e} |log p(real)={:.2e}, "
@@ -186,7 +188,7 @@ def main_loop(db, args):
             
             if args.vocab_size == 2:
                 utils.plot_heat(energy_model, db.f_scale, bm, f'{args.plot_path}ebm_heat_{itr + 1}.png', args)
-                utils.plot_sampler(energy_model, f'{args.sample_path}ebm_samples_{epoch}.png', args)
+                utils.plot_sampler(energy_model, f'{args.sample_path}ebm_samples_{itr + 1}.png', args)
                 gfn_samples = gfn.sample(2500).detach()
                 gfn_samp_float = utils.bin2float(gfn_samples.data.cpu().numpy().astype(int), inv_bm, args.discrete_dim, args.int_scale)
                 utils.plot_samples(gfn_samp_float, f'{args.sample_path}gfn_samples_{itr + 1}.png', im_size=4.1, im_fmt='png')

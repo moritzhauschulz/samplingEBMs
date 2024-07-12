@@ -85,8 +85,9 @@ def get_args():
     parser.add_argument("--final_ais_num_steps", type=int, default=1000)
     parser.add_argument("--intermediate_ais_num_steps", type=int, default=100)
     parser.add_argument('--gibbs_num_rounds', type=int, default=100)
-
     parser.add_argument('--pretrained_ebm', type=str, default='imaginary file')
+    parser.add_argument('--compute_mmd_base_stats', default=False, type=bool, help='compute mmd variance and mean as a benchmark')
+
 
     args = parser.parse_args()
 
@@ -179,10 +180,8 @@ if __name__ == '__main__':
         db, bm, inv_bm = utils.setup_data(args)
         args.bm = bm
         args.inv_bm = inv_bm
-        plot_binary_data_samples(db, args)
     else:
         db = utils.our_setup_data(args)
-        plot_categorical_data_samples(db, args)
 
     if args.compute_mmd_base_stats:
         N = 25

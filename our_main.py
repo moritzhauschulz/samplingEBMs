@@ -19,6 +19,7 @@ from methods.cd_ebm.train import main_loop as cd_ebm_main_loop
 from methods.cd_runi_inter.train import main_loop as cd_runi_inter_main_loop
 from methods.dataq_dfs.train import main_loop as dataq_dfs_main_loop
 from methods.dataq_dfs_ebm.train import main_loop as dataq_dfs_ebm_main_loop
+from methods.uniform_ebm.train import main_loop as uniform_ebm_main_loop
 
 def get_args():
     parser = argparse.ArgumentParser(description='Pipeline')
@@ -28,7 +29,8 @@ def get_args():
             'punidb', 'runidb',
             'ed_ebm', 'ebm_runidb',
             'cd_ebm', 'cd_runi_inter',
-            'dataq_dfs', 'dataq_dfs_ebm'
+            'dataq_dfs', 'dataq_dfs_ebm',
+            'uniform_ebm'
         ],
     )
 

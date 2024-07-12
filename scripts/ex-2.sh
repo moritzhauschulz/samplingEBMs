@@ -33,7 +33,7 @@ mkdir -p $output_date
 echo "Starting job ${filename} at $(date)"
 
 ############# SPECIFY JOB BELOW ################
-python our_main.py --data_name 2spirals --mixture 0 --methods dataq_dfs_ebm --gpu 0 --vocab_size 2 --plot_every 1000 --eval_every 5000 --num_epochs 100000 --surrogate_iter_per_epoch 1 --ebm_iter_per_epoch 0 --batch_size 128 --delta_t 0.01 --dfs_lr 0.0001 --ebm_lr 0.001 --final_ais_samples 10000 --final_ais_num_steps 100 --warmup_k 1e5 > $output_date/output1.log 2>&1 &
+python our_main.py --data_name 2spirals --mixture 1 --methods dataq_dfs_ebm --gpu 0 --vocab_size 2 --plot_every 1000 --eval_every 5000 --num_epochs 100000 --surrogate_iter_per_epoch 1 --ebm_iter_per_epoch 0 --batch_size 128 --delta_t 0.01 --dfs_lr 0.0001 --ebm_lr 0.001 --final_ais_samples 10000 --final_ais_num_steps 100 --warmup_k 1e5 > $output_date/output1.log 2>&1 &
 wait
 
 ############# SPECIFY JOB ABOVE ################

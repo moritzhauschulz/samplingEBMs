@@ -34,6 +34,7 @@ methods/dataq_dfs/experiments/
 methods/gfn/experiments/
 methods/dataq_dfs_ebm/experiments
 methods/uniform_ebm/experiments
+mmd_results/
 
 #env
 myenv

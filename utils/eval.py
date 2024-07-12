@@ -81,6 +81,7 @@ def make_plots(log_path, output_dir='', reference_value=None, last_n=5):
     ax1.set_xlabel('Epoch')
     ax1.set_ylabel('Value')
     ax1.set_title('Metrics over Epochs')
+    ax1.set_ylim(0,0.01)
 
     # Plot other metrics on the left y-axis
     for metric in metrics:
@@ -98,8 +99,11 @@ def make_plots(log_path, output_dir='', reference_value=None, last_n=5):
     if 'ebm_nll' in metrics:
         ax2 = ax1.twinx()
         ax2.set_ylabel('ebm_nll')
+        ax2.set_ylim(19,21)
         ax2.plot(df['epoch'], df['ebm_nll'], color='tab:red', label='ebm_nll')
         ax2.legend(loc='lower right')
+
+
 
     # Add averages text
     add_averages_text(ax1, df, metrics)
@@ -114,6 +118,7 @@ def make_plots(log_path, output_dir='', reference_value=None, last_n=5):
     ax1.set_xlabel('Timestamp')
     ax1.set_ylabel('Value')
     ax1.set_title('Metrics over Time')
+    ax1.set_ylim(0,0.01)
 
     # Plot other metrics on the left y-axis
     for metric in metrics:
@@ -131,6 +136,7 @@ def make_plots(log_path, output_dir='', reference_value=None, last_n=5):
     if 'ebm_nll' in metrics:
         ax2 = ax1.twinx()
         ax2.set_ylabel('ebm_nll')
+        ax2.set_ylim(19,21)
         ax2.plot(df['timestamp'], df['ebm_nll'], color='tab:red', label='ebm_nll')
         ax2.legend(loc='lower right')
 

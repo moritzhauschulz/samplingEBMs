@@ -176,7 +176,6 @@ def main_loop(db, args):
             log_entry['sampler_mmd'] = sampler_evaluation(args, db, lambda x: gfn.sample(x))
             log_entry['sampler_ebm_mmd'] = sampler_ebm_evaluation(args, db, lambda x: gfn.sample(x), energy_model)
 
-]
             # torch.save(energy_model.state_dict(), f'{args.ckpt_path}ebm_model_{itr + 1}.pt')
             torch.save(gfn.model.state_dict(), f'{args.ckpt_path}gfn_model_{itr + 1}.pt')
             
