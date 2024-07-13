@@ -82,7 +82,7 @@ def main_loop(db, args):
     while itr < args.n_iters:
         st = time.time()
 
-        for i in range(ebm_every):
+        for i in range(args.ebm_every):
             x = get_batch_data(db, args)
             x = torch.from_numpy(np.float32(x)).to(args.device)
             update_success_rate = -1.
@@ -92,6 +92,7 @@ def main_loop(db, args):
                     back_ratio=args.back_ratio)
 
         x = get_batch_data(db, args)
+        x = torch.from_numpy(np.float32(x)).to(args.device)
         if args.rand_k or args.lin_k or (args.K > 0):
             if args.rand_k:
                 K = random.randrange(xdim) + 1
