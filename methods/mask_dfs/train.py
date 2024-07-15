@@ -10,10 +10,11 @@ import torch.distributions as dists
 from torch.distributions.categorical import Categorical
 import pickle
 import time
+import torch.nn.functional as F
 
 from utils import utils
-from methods.cd_runi_inter.model import MLPScore, EBM
-from methods.cd_runi_inter.model import MLPModel as MLPFlow
+from methods.mask_dfs.model import MLPScore, EBM
+from methods.mask_dfs.model import MLPModel as MLPFlow
 from utils import sampler
 from utils.eval import ebm_evaluation
 from utils.eval import sampler_evaluation
@@ -25,51 +26,74 @@ from utils.eval import make_plots
 
 def gen_samples(model, args, batch_size=None, t=0.0, xt=None):
     model.eval()
-    S, D = args.vocab_size + 1, args.discrete_dim
-
-    # dt = args.delta_t
-    # if batch_size is None:
-    #     batch_size = args.batch_size
-    # if xt is None:
-    #     xt = torch.randint(0, S, (batch_size, D)).to(args.device)
+    S, D = args.vocab_size_with_mask, args.discrete_dim
 
     # Variables, B, D for batch size and number of dimensions respectively
-    B = args.batch_size
+    B = batch_size if batch_size is not None else args.batch_size
 
-    # Assume we have a model that takes as input xt of shape (B, D) and time of shape (B,)
-    # and outputs x1 prediction logits of shape (B, D, S). We know the clean data 
-    # contains no masks and hence we only need to output logits over the valid values.
-
-    t = 0.0
-    dt = args.delta_t
-    N = args.eta  # Level of stochasticity
+    # Level of stochasticity
+    N = args.eta  
     M = S - 1
 
-    # Initialize xt with random binary values
+    # Initialize xt with the mask index value if not provided
     if xt is None:
-        xt = M * torch.ones(0, S, (B, D), dtype=torch.long).to(args.device)
-    # Initialize a mask tensor with all ones (all positions initially masked)
-    mask = torch.ones((B, D), dtype=torch.bool).to(args.device)
+        xt = M * torch.ones((B, D), dtype=torch.long).to(args.device)
+
+    dt = args.delta_t  # Time step
+    t = 0.0  # Initial time
 
     while t < 1.0:
-        logits = model(xt, t * torch.ones((B,)))  # (B, D, S-1)
-        x1_probs = F.softmax(logits, dim=-1)  # (B, D, S-1)
-        x1 = Categorical(x1_probs).sample()  # (B, D)
+        t_ = t * torch.ones((batch_size,)).to(args.device)
+        with torch.no_grad():
+            step_probs = model(xt, t_) * dt
 
-        will_unmask = torch.rand((B, D)) < (dt * (1 + N * t) / (1 - t))  # (B, D)
-        will_unmask = will_unmask * (xt == mask_index)  # (B, D) only unmask currently masked positions
+        step_probs = step_probs.clamp(max=1.0)
 
-        will_mask = torch.rand((B, D)) < dt * N  # (B, D)
-        will_mask = will_mask * (xt != mask_index)  # (B, D) only re-mask currently unmasked positions
-
-        xt[will_unmask] = x1[will_unmask]
-        
-        # Masking and unmasking logic
+        # Calculate the on-diagnoal step probabilities
+        # 1) Zero out the diagonal entries
+        step_probs.scatter_(-1, xt[:, :, None], 0.0)
+        # 2) Calculate the diagonal entries such that the probability row sums to 1
+        step_probs.scatter_(-1, xt[:, :, None], (1.0 - step_probs.sum(dim=-1, keepdim=True)).clamp(min=0.0)) 
         t += dt
 
         if t < 1.0:  # Don’t re-mask on the final step
-            xt[will_mask] = mask_index
+        #     xt[will_mask] = M
+            xt = Categorical(step_probs).sample() # (B, D)
+        else:
+            if torch.any(xt == M):
+                num_masked_entries = torch.sum(xt == M).item()
+                print(f"Number of masked entries in the final tensor: {num_masked_entries}")
+                print(f"Forcing mask values into range...")
+            step_probs[:, :, M] = 0
+            step_probs_sum = step_probs.sum(dim=-1, keepdim=True)
+            step_probs = step_probs / step_probs_sum
+            xt = Categorical(step_probs).sample() # (B, D)
 
+
+
+        #raise ValueError("Masked entries remain in the final sampled output.")
+    
+
+
+
+        # masking should be learned not enforced...
+        # unmask_prob = dt * (1 + N * (t)) / (1 - t)
+        # mask_prob = dt * N 
+
+        # will_unmask = torch.rand((B, D)).to(args.device) < unmask_prob  # (B, D)
+        # will_unmask = will_unmask * (xt == M)  # (B, D) only unmask currently masked positions
+
+        # will_mask = torch.rand((B, D)).to(args.device) < mask_prob # (B, D)
+        # will_mask = will_mask * (xt != M)  # (B, D) only re-mask currently unmasked positions
+
+        # xt[will_unmask] = x1[will_unmask]
+
+        # print(f't: {t:.4f} unmask prob: {unmask_prob:.4f} mask prob: {mask_prob:.4f}')
+        
+        # Increment time step
+
+        # if t < 1.0:  # Don’t re-mask on the final step
+        #     xt[will_mask] = M
     return xt.detach().cpu().numpy()
 
 def get_batch_data(db, args, batch_size=None):
@@ -83,47 +107,50 @@ def get_batch_data(db, args, batch_size=None):
     return bx
 
 def compute_loss(ebm_model, dfs_model, q_dist, xt, x1, t, args):
-    (B, D), S = x1.size(), args.vocab_size + 1
+    (B, D), S = x1.size(), args.vocab_size_with_mask
     M = S - 1
 
     # Initialize the R_star tensor
-    R_star = torch.zeros((B, D, S)).to(x1.device)
+    R_star = torch.zeros((B, D, S)).to(args.device)
 
     # Use scatter_ to fill in the appropriate values based on x1
     R_star = R_star.scatter_(-1, x1[:, :, None], 1.0)
 
-    # Create a mask for the condition where x_t == M
-    mask_condition = (x_t == M)  # Shape (B, D)
+    # Create a mask for the condition where xt == M
+    mask_condition = (xt == M)  # Shape (B, D)
 
     # Expand the mask_condition to match the last dimension S
     mask_condition_expanded = mask_condition.unsqueeze(-1).expand(-1, -1, S)
 
-    # Update R_star to set entries to 1/(1-t) where the conditions are met
-    R_star = R_star * mask_condition_expanded.float() * (1 / (1 - t))
+    t_expanded = t[:, None, None].expand(-1, D, S)
+    R_star[mask_condition_expanded] = 1 / (1 - t_expanded[mask_condition_expanded])
 
-   # Initialize the R_star tensor
-    R_DB = torch.zeros((B, D, S)).to(x1.device)
+    # Initialize the R_DB tensor
+    R_DB = torch.zeros((B, D, S)).to(args.device)
 
     # Use scatter_ to fill in the appropriate values based on x1
     R_DB = R_DB.scatter_(-1, x1[:, :, None], 1.0)
 
-    # Create a mask for the conditions
-    condition1 = (x_t == M).unsqueeze(-1) & (torch.arange(S).to(x1.device) == x1.unsqueeze(-1))
-    condition2 = (x_t.unsqueeze(-1) == M) & (torch.arange(S).to(x1.device) == x1.unsqueeze(-1))
-
-    # Calculate the two components of R_DB
-    R_DB[condition1] = eta
-    R_DB[condition2] = eta * (t / (1 - t))
+    # Create conditions for R_DB
+    condition1 = (xt == M).unsqueeze(-1) & (torch.arange(S).to(args.device) == x1.unsqueeze(-1))
+    condition2 = (xt.unsqueeze(-1) == M) & (torch.arange(S).to(args.device) == x1.unsqueeze(-1))
 
     # Combine both components based on the given formula
-    R_DB = eta * condition1.float() + eta * (t / (1 - t)) * condition2.float()
+    R_DB = args.eta * condition1.float() + args.eta * (t_expanded / (1 - t_expanded)) * condition2.float()
 
-    R_true = (R_star + R_DB) * (1 - t[:, None, None])
-    R_est = dfs_model(xt, t) * (1 - t[:, None, None])
+    # Calculate R_true and R_est
+    R_true = (R_star + R_DB) #* (1 - t[:, None, None]) #why are we doing this multiplication?
+    R_est = dfs_model(xt, t) #* (1 - t[:, None, None])
+
+    # Calculate loss
     loss = (R_est - R_true).square()
+    # mask = (xt == M)
+    # mask_expanded = mask.unsqueeze(-1).expand(-1, -1, S)
     loss.scatter_(-1, xt[:, :, None], 0.0)
-    loss = loss.sum(dim=(1,2))
+    # loss[~mask_expanded] = 0.0
+    loss = loss.sum(dim=(1, 2))
 
+    # Calculate energy and density
     energy = torch.exp(-ebm_model(x1.float()))
     q_density = q_dist.log_prob(x1.float()).sum(dim=-1).exp()
     loss = (energy / q_density * loss).mean(dim=0)
@@ -170,12 +197,10 @@ def main_loop(db, args, verbose=False):
 
             x1 = q_dist.sample((args.batch_size,)).long() #remember that there is no data available under the assumptions
 
-            (B, D), S = x1.size(), args.vocab_size
+            (B, D), S = x1.size(), args.vocab_size_with_mask
             t = torch.rand((B,)).to(args.device)
             xt = x1.clone()
-            uniform_noise = torch.randint(0, S, (B, D)).to(args.device)
-            corrupt_mask = torch.rand((B, D)).to(args.device) < (1 - t[:, None])
-            xt[corrupt_mask] = uniform_noise[corrupt_mask]
+            xt[torch.rand((B,D)).to(args.device) < (1 - t[:, None])] = S - 1
             
             loss = compute_loss(ebm_model, dfs_model, q_dist, xt, x1, t, args) #basically fit dfs_model to ebm model
             

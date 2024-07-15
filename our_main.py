@@ -126,6 +126,7 @@ def get_args():
     args.completed = False
     args.mmd_mean = None
     args.mmd_var = None
+    args.vocab_size_with_mask = args.vocab_size + 1 * int((args.methods in ['mask_dfs']))
 
     start_time = datetime.datetime.now()
     args.start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
