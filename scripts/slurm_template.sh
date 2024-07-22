@@ -6,16 +6,10 @@
 #SBATCH --output=/dev/null # Temporarily send output to /dev/null
 #SBATCH --error=/dev/null # Temporarily send error to /dev/null
 
-# Extract the file name without the extension
-script_path="$0"
-filename=$(basename "$script_path" .pt)
+JOB_BASE_NAME="${SLURM_JOB_NAME%.sh}"
 
-
-# Create the new directory name by appending '_output'
-output="./${filename}_output/"
-
-# Create the new directory in the current directory
-mkdir -p $output
+log_dir="./${JOB_BASE_NAME}_output"
+mkdir -p $log_dir
 
 # Ensure correct PATH to your virtual environment
 export PATH=/vol/bitbucket/${USER}/samplingEBMs/.venv/bin:$PATH
@@ -27,16 +21,26 @@ cd ..
 
 CURRENT_DATE=$(date +"%Y%m%d_%H%M%S")
 
-output_date="./scripts/${filename}_output/${CURRENT_DATE}"
+output_date="./scripts/${JOB_BASE_NAME}_output/${SLURM_JOB_ID}_${CURRENT_DATE}/"
 mkdir -p $output_date
 
-echo "Starting job ${filename} at $(date)"
+echo $output
+
+# Redirect output and error to the desired files
+exec >"${output_date}/${JOB_BASE_NAME}_${SLURM_JOB_ID}.out" 2>"${output_date}/${JOB_BASE_NAME}_${SLURM_JOB_ID}.err"
+
+echo "Starting job ${JOB_BASE_NAME} with ID $SLURM_JOB_ID"
+echo "Job started at $(date)"
 
 ############# SPECIFY JOB BELOW ################
-python our_main.py --data_name 2spirals --mixture 1 --methods cd_runi_inter --gpu 0 --vocab_size 2 --plot_every 1000 --eval_every 5000 --num_epochs 100000 --surrogate_iter_per_epoch 1 --ebm_iter_per_epoch 0 --batch_size 128 --delta_t 0.01 --dfs_lr 0.0001 --ebm_lr 0.001 --final_ais_samples 10000 --final_ais_num_steps 100 --warmup_k 1e5 > $output_date/output1.log 2>&1 &
+
+... > ${output_files}_output1.log 2>&1 &
+... > ${output_files}_output2.log 2>&1 &
+...
 wait
 
 ############# SPECIFY JOB ABOVE ################
+
 echo "Job finished at $(date)"
 
 uptime
