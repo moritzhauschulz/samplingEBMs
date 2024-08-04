@@ -82,7 +82,7 @@ def main_loop(db, args):
     while itr < args.n_iters:
         st = time.time()
 
-        for i in range(args.ebm_every):
+        for _ in range(args.gfn_iter_per_epoch):
             x = get_batch_data(db, args)
             x = torch.from_numpy(np.float32(x)).to(args.device)
             update_success_rate = -1.
@@ -91,54 +91,57 @@ def main_loop(db, args):
                     scorer=lambda inp: -1 * energy_model(inp).detach(), silent=itr % args.print_every != 0, data=x,
                     back_ratio=args.back_ratio)
 
-        x = get_batch_data(db, args)
-        x = torch.from_numpy(np.float32(x)).to(args.device)
-        if args.rand_k or args.lin_k or (args.K > 0):
-            if args.rand_k:
-                K = random.randrange(xdim) + 1
-            elif args.lin_k:
-                K = min(xdim, int(xdim * float(itr + 1) / args.warmup_k))
-                K = max(K, 1)
-            elif args.K > 0:
-                K = args.K
+        for _ in range(args.ebm_iter_per_epoch):
+            x = get_batch_data(db, args)
+            x = torch.from_numpy(np.float32(x)).to(args.device)
+            if args.rand_k or args.lin_k or (args.K > 0):
+                if args.rand_k:
+                    K = random.randrange(xdim) + 1
+                elif args.lin_k:
+                    K = min(xdim, int(xdim * float(itr + 1) / args.warmup_k))
+                    K = max(K, 1)
+                elif args.K > 0:
+                    K = args.K
+                else:
+                    raise ValueError
+
+                gfn.model.eval()
+                x_fake, delta_logp_traj = gfn.backforth_sample(x, K)
+
+                delta_logp_traj = delta_logp_traj.detach()
+                if args.with_mh:
+                    # MH step, calculate log p(x') - log p(x)
+                    lp_update = (-1 * energy_model(x_fake).squeeze()) - (-1 * energy_model(x).squeeze())
+                    update_dist = torch.distributions.Bernoulli(logits=lp_update + delta_logp_traj)
+                    updates = update_dist.sample()
+                    x_fake = x_fake * updates[:, None] + x * (1. - updates[:, None])
+                    update_success_rate = updates.mean().item()
+                else:
+                    update_success_rate = None
+
             else:
-                raise ValueError
-
-            gfn.model.eval()
-            x_fake, delta_logp_traj = gfn.backforth_sample(x, K)
-
-            delta_logp_traj = delta_logp_traj.detach()
-            if args.with_mh:
-                # MH step, calculate log p(x') - log p(x)
-                lp_update = (-1 * energy_model(x_fake).squeeze()) - (-1 * energy_model(x).squeeze())
-                update_dist = torch.distributions.Bernoulli(logits=lp_update + delta_logp_traj)
-                updates = update_dist.sample()
-                x_fake = x_fake * updates[:, None] + x * (1. - updates[:, None])
-                update_success_rate = updates.mean().item()
-
-        else:
-            x_fake = gfn.sample(batch_size)
+                x_fake = gfn.sample(batch_size)
 
 
-        # if itr % args.ebm_every == 0:
-        st = time.time() - st
+            # if itr % args.ebm_every == 0:
+            st = time.time() - st
 
-        energy_model.train()
-        logp_real = -1 * energy_model(x).squeeze()
+            energy_model.train()
+            logp_real = -1 * energy_model(x).squeeze()
 
-        logp_fake = -1 * energy_model(x_fake).squeeze()
-        obj = logp_real.mean() - logp_fake.mean()
-        l2_reg = (logp_real ** 2.).mean() + (logp_fake ** 2.).mean()
-        loss = -obj
+            logp_fake = -1 * energy_model(x_fake).squeeze()
+            obj = logp_real.mean() - logp_fake.mean()
+            l2_reg = (logp_real ** 2.).mean() + (logp_fake ** 2.).mean()
+            loss = -obj
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-        if itr % args.print_every == 0 or itr == args.n_iters - 1:
-            print("({:5d}) | ({:.3f}s/iter) cur lr= {:.2e} |log p(real)={:.2e}, "
-                     "log p(fake)={:.2e}, diff={:.2e}, update_rate={:.1f}".format(
-                itr, st, lr, logp_real.mean().item(), logp_fake.mean().item(), obj.item(), update_success_rate))
+        # if (itr % args.print_every == 0 or itr == args.n_iters - 1) and args.ebm_iter_per_epoch > 0:
+        #     print("({:5d}) | ({:.3f}s/iter) cur lr= {:.2e} |log p(real)={:.2e}, "
+        #              "log p(fake)={:.2e}, diff={:.2e}, update_rate={:.1f}".format(
+        #         itr, st, lr, logp_real.mean().item(), logp_fake.mean().item(), obj.item(), update_success_rate))
 
 
         if (itr + 1) % args.eval_every == 0 or (itr + 1) == args.n_iters:
@@ -173,6 +176,8 @@ def main_loop(db, args):
             log_entry['ebm_nll'], log_entry['ebm_mmd'] = ebm_evaluation(args, db, energy_model, batch_size=4000, ais_samples=ais_samples, ais_num_steps=ais_num_steps) # batch_size=4000, ais_samples=1000000, ais_num_intermediate=100
             log_entry['sampler_mmd'] = sampler_evaluation(args, db, lambda x: gfn.sample(x))
             log_entry['sampler_ebm_mmd'] = sampler_ebm_evaluation(args, db, lambda x: gfn.sample(x), energy_model)
+            if not update_success_rate is None:
+                log_entry['MH_update_success_rate'] = update_success_rate
 
             torch.save(energy_model.state_dict(), f'{args.ckpt_path}ebm_model_{itr + 1}.pt')
             torch.save(gfn.model.state_dict(), f'{args.ckpt_path}gfn_model_{itr + 1}.pt')

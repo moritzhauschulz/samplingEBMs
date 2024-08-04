@@ -21,6 +21,14 @@ from methods.dataq_dfs.train import main_loop as dataq_dfs_main_loop
 from methods.dataq_dfs_ebm.train import main_loop as dataq_dfs_ebm_main_loop
 from methods.uniform_ebm.train import main_loop as uniform_ebm_main_loop
 from methods.mask_dfs.train import main_loop as mask_dfs_main_loop
+from methods.mask_dfs_2.train import main_loop as mask_dfs_2_main_loop
+from methods.mask_dfs_3.train import main_loop as mask_dfs_3_main_loop
+from methods.mask_dfs_4.train import main_loop as mask_dfs_4_main_loop
+from methods.mask_dfs_5.train import main_loop as mask_dfs_5_main_loop
+from methods.mask_dfs_ce.train import main_loop as mask_dfs_ce_main_loop
+from methods.mask_dfs_ce_forced.train import main_loop as mask_dfs_ce_forced_main_loop
+from methods.mask_dfs_ce_2.train import main_loop as mask_dfs_ce_2_main_loop
+
 
 def get_args():
     parser = argparse.ArgumentParser(description='Pipeline')
@@ -31,7 +39,10 @@ def get_args():
             'ed_ebm', 'ebm_runidb',
             'cd_ebm', 'cd_runi_inter',
             'dataq_dfs', 'dataq_dfs_ebm',
-            'uniform_ebm', 'mask_dfs'
+            'uniform_ebm', 'mask_dfs',
+            'mask_dfs_2', 'mask_dfs_3',
+            'mask_dfs_4', 'mask_dfs_5',
+            'mask_dfs_ce', 'mask_dfs_ce_2',  'mask_dfs_ce_forced'
         ],
     )
 
@@ -75,6 +86,9 @@ def get_args():
     parser.add_argument('--pretrained_ebm', type=str, default='imaginary file')
     parser.add_argument('--compute_mmd_base_stats', default=False, type=bool, help='compute mmd variance and mean as a benchmark')
 
+    parser.add_argument("--r_mult", type=int, default=1, choices=[0, 1])
+    parser.add_argument('--eta_list', nargs='+', type=int, help='A list of integers for etas applied at inference (if applicable).', default=[0,1,2])
+    
     args = parser.parse_args()
 
     gpu = args.gpu
@@ -126,7 +140,7 @@ def get_args():
     args.completed = False
     args.mmd_mean = None
     args.mmd_var = None
-    args.vocab_size_with_mask = args.vocab_size + 1 * int((args.methods in ['mask_dfs']))
+    args.vocab_size_with_mask = args.vocab_size + 1
 
     start_time = datetime.datetime.now()
     args.start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")

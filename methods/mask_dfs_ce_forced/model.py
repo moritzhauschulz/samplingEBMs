@@ -71,12 +71,50 @@ class MLP(nn.Module):
         x = self.main(z)
         return x
 
+class alt_MLPModel(nn.Module):
+    def __init__(self, args):
+        super(alt_MLPModel, self).__init__()
+
+        D = args.discrete_dim
+        self.args = args
+        self.S = args.vocab_size_with_mask
+        self.embedding = nn.Embedding(self.S, 16)
+        self.net = nn.Sequential(
+            nn.Linear((16+1) * D, 1024),
+            Swish(),
+            nn.Linear(1024, 1024),
+            Swish(),
+            nn.Linear(1024, 1024),
+            Swish(),
+            nn.Linear(1024, (self.S - 1) * D), #note we reduce output state number (diagonal is imputed later)
+            nn.ReLU()
+        )
+    
+    def forward(self, x, t):
+        B, D = x.shape
+
+        x_emb = self.embedding(x)   # (B, D, 16)
+        t_expanded = t[:, None, None].repeat(1, D, 1) 
+        net_input = torch.cat([x_emb, t_expanded], dim=-1).reshape(B, -1) # (B, D * 17)
+        net_output = self.net(net_input).reshape(B, D, -1)
+        # Create a mask to identify positions to exclude
+        mask = torch.ones((B, D, self.S), dtype=bool).to(self.args.device)
+        batch_indices = torch.arange(B).unsqueeze(1).unsqueeze(2)
+        dim_indices = torch.arange(D).unsqueeze(0).unsqueeze(2)
+        mask[batch_indices, dim_indices, x.unsqueeze(-1)] = False
+        expanded_net_output = torch.zeros((B, D, self.S)).to(self.args.device)
+        net_output_flat = net_output.view(B, D * (self.S - 1))
+        expanded_net_output[mask] = net_output_flat.flatten()
+        expanded_net_output[~mask] = -1 * torch.sum(expanded_net_output,-1).flatten()
+
+        return expanded_net_output   # (B, D, S)
+
 class MLPModel(nn.Module):
     def __init__(self, args):
         super(MLPModel, self).__init__()
 
         D = args.discrete_dim
-        S = args.vocab_size_with_mask
+        S = args.vocab_size
         self.embedding = nn.Embedding(args.vocab_size_with_mask, 16)
         self.net = nn.Sequential(
             nn.Linear((16+1) * D, 1024),
@@ -97,9 +135,6 @@ class MLPModel(nn.Module):
 
         net_input = torch.cat([x_emb, t_expanded], dim=-1).reshape(B, -1) # (B, D * 17)
         return self.net(net_input).reshape(B, D, -1)   # (B, D, S)
-
-
-
 
 
 class MLPScore(nn.Module):

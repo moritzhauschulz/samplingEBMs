@@ -35,8 +35,17 @@ methods/gfn/experiments/
 methods/dataq_dfs_ebm/experiments
 methods/uniform_ebm/experiments
 methods/mask_dfs/experiments
+methods/mask_dfs_2/experiments
+methods/mask_dfs_3/experiments
+methods/mask_dfs_4/experiments
+methods/mask_dfs_5/experiments
+methods/mask_dfs_ce/experiments
+methods/mask_dfs_ce_2/experiments
+methods/mask_dfs_ce_forced/experiments
+methods/mask_dfs_ce/experiments
 
-mmd_results/
+
+mmd_results
 
 #env
 myenv

@@ -13,8 +13,10 @@ import time
 import torch.nn.functional as F
 
 from utils import utils
-from methods.mask_dfs.model import MLPScore, EBM
-from methods.mask_dfs.model import MLPModel as MLPFlow
+from methods.mask_dfs_3.model import MLPScore, EBM
+from methods.mask_dfs_3.model import MLPModel as MLPFlow
+from methods.mask_dfs_3.model import alt_MLPModel as alt_MLPFlow
+
 from utils import sampler
 from utils.eval import ebm_evaluation
 from utils.eval import sampler_evaluation
@@ -25,7 +27,7 @@ from utils.eval import log_completion
 from utils.eval import make_plots
 
 def make_sampler(model_path, args):
-    sampler = MLPFlow(args).to(args.device)
+    sampler = alt_MLPFlow(args).to(args.device)
     try:
         sampler.load_state_dict(torch.load(model_path))
     except FileNotFoundError as e:
@@ -33,7 +35,6 @@ def make_sampler(model_path, args):
         sys.exit(1)
     sampler.eval()
     return sampler
-
 
 def gen_samples(model, args, batch_size=None, t=0.0, xt=None):
     model.eval()
@@ -56,16 +57,19 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None):
     while t < 1.0:
         t_ = t * torch.ones((batch_size,)).to(args.device)
         with torch.no_grad():
-            step_probs = model(xt, t_) * dt
+            R_dt = model(xt, t_) * dt
+            diagonal_ones = torch.zeros_like(R_dt).to(args.device)
+            diagonal_ones = diagonal_ones.scatter_(-1, xt[:, :, None], 1.0) #what should I replace the ones with given that probabilities might be incorrect
+            step_probs = (diagonal_ones + R_dt).clamp(min=0, max=1) #clamping to avoid out of range values
 
-        torch.sum(step_probs > 1)
-        step_probs = step_probs.clamp(max=1.0) #normalize instead?
+        # torch.sum(step_probs > 1)
+        # step_probs = step_probs.clamp(max=1.0) #normalize instead?
 
-        # Calculate the on-diagnoal step probabilities
-        # 1) Zero out the diagonal entries
-        step_probs.scatter_(-1, xt[:, :, None], 0.0) #I will try normalizing first
-        # 2) Calculate the diagonal entries such that the probability row sums to 1
-        step_probs.scatter_(-1, xt[:, :, None], (1.0 - step_probs.sum(dim=-1, keepdim=True)).clamp(min=0.0)) 
+        # # Calculate the on-diagnoal step probabilities
+        # # 1) Zero out the diagonal entries
+        # step_probs.scatter_(-1, xt[:, :, None], 0.0) #I will try normalizing first
+        # # 2) Calculate the diagonal entries such that the probability row sums to 1
+        # step_probs.scatter_(-1, xt[:, :, None], (1.0 - step_probs.sum(dim=-1, keepdim=True)).clamp(min=0.0)) 
         t += dt
 
         if t < 1.0:  # Don’t re-mask on the final step
@@ -73,20 +77,22 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None):
             step_probs_sum = step_probs.sum(dim=-1, keepdim=True)
             non_zero_mask = (step_probs_sum != 0).expand_as(step_probs)
             step_probs[non_zero_mask] = step_probs[non_zero_mask] / step_probs_sum.expand_as(step_probs)[non_zero_mask]
-
+            if torch.any(non_zero_mask == False):
+                print(f'Careful: Had to introduce {torch.sum(~non_zero_mask)} new unifrom probabilities due to zero sum – could not normalize')
+                step_probs[~non_zero_mask] = 1/S
             xt = Categorical(step_probs).sample() # (B, D)
         else:
             if torch.any(xt == M):
                 num_masked_entries = torch.sum(xt == M).item()
-                print(f"Number of masked entries in the final tensor: {num_masked_entries}")
+                print(f"Share of masked entries in the final tensor: {num_masked_entries / (B * D)}")
                 print(f"Forcing mask values into range...")
             step_probs[:, :, M] = 0
             step_probs_sum = step_probs.sum(dim=-1, keepdim=True)
             non_zero_mask = (step_probs_sum != 0).expand_as(step_probs)
             step_probs[non_zero_mask] = step_probs[non_zero_mask] / step_probs_sum.expand_as(step_probs)[non_zero_mask]
-
             zero_sum_mask = step_probs_sum == 0
             if zero_sum_mask.any():
+                print(f'Careful: Had to introduce {torch.sum(~non_zero_mask)} new unifrom probabilities in final step due to zero sum – could not normalize')
                 step_probs[zero_sum_mask.expand(-1, -1, S) & (torch.arange(S).to(args.device) < 2).unsqueeze(0).unsqueeze(0)] = 0.5
 
             xt = Categorical(step_probs).sample() # (B, D)
@@ -151,7 +157,7 @@ def compute_loss(ebm_model, dfs_model, q_dist, xt, x1, t, args):
     loss = (R_est - R_true).square()
     # mask = (xt == M)
     # mask_expanded = mask.unsqueeze(-1).expand(-1, -1, S)
-    loss.scatter_(-1, xt[:, :, None], 0.0)
+    # loss.scatter_(-1, xt[:, :, None], 0.0)
     # loss[~mask_expanded] = 0.0
     loss = loss.sum(dim=(1, 2))
 
@@ -182,10 +188,10 @@ def main_loop(db, args, verbose=False):
     ebm_model.eval()
     utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}/initial_heat.png', args)
 
-    dfs_model = MLPFlow(args).to(args.device)
+    dfs_model = alt_MLPFlow(args).to(args.device)
     dfs_optimizer = torch.optim.Adam(dfs_model.parameters(), lr=args.dfs_lr)
 
-    pbar = tqdm(range(1,args.num_epochs + 1))
+    pbar = tqdm(range(1,args.num_epochs + 1)) if verbose else range(1,args.num_epochs + 1)
 
     start_time = time.time()
     cum_eval_time = 0
@@ -224,7 +230,8 @@ def main_loop(db, args, verbose=False):
             log_entry['sampler_mmd'] = sampler_evaluation(args, db, lambda x: torch.from_numpy(gen_samples(dfs_model, args, batch_size=x)))
             log_entry['sampler_ebm_mmd'] = sampler_ebm_evaluation(args, db, lambda x: torch.from_numpy(gen_samples(dfs_model, args, batch_size=x)), ebm_model)
             log_entry['loss'] = loss.item()
-        
+
+
             torch.save(dfs_model.state_dict(), f'{args.ckpt_path}/model_{epoch}.pt')
 
             eval_end_time = time.time()
@@ -248,7 +255,10 @@ def main_loop(db, args, verbose=False):
             eval_time = eval_end_time - eval_start_time
             cum_eval_time += eval_time
 
-        pbar.set_description(f'Epoch {epoch}')
+        if verbose:
+            pbar.set_description(f'Epoch {epoch}')
+        elif (epoch % args.plot_every == 0) or (epoch == args.num_epochs):
+            print(f'Epoch is {epoch} with loss at {loss}')
 
 
     make_plots(args.log_path)

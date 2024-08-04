@@ -76,8 +76,8 @@ def compute_loss(ebm_model, dfs_model, q_dist, xt, x1, t, args):
     R_DB_2 = R_DB_2.scatter_(-1, x1[:, :, None], 1.0) * args.eta * ((S*t + 1 - t) / (1-t))[:, None, None]
     R_DB = R_DB_1 + R_DB_2
 
-    R_true = (R_star + R_DB) * (1 - t[:, None, None])
-    R_est = dfs_model(xt, t) * (1 - t[:, None, None])
+    R_true = (R_star + R_DB) #* (1 - t[:, None, None]) #do we need this multiplication?
+    R_est = dfs_model(xt, t) #* (1 - t[:, None, None])
     loss = (R_est - R_true).square()
     loss.scatter_(-1, xt[:, :, None], 0.0)
     loss = loss.sum(dim=(1,2))

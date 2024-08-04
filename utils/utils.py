@@ -23,6 +23,27 @@ def get_last_n_levels(path, n=6):
     
     return result
 
+def remove_last_n_levels(path, n=6):
+    # Split the path into components
+    parts = path.split(os.sep)
+    
+    # Check if the path has at least six levels
+    n = min(len(parts),n)
+    
+    # Get the last six levels and join them back into a string
+    without_last_n_levels = parts[:len(parts)-n]
+    result = '/'.join(without_last_n_levels)
+    
+    return result
+
+
+def has_n_levels(path, n=6):
+    # Split the path into components
+    parts = path.split(os.sep)
+    
+    # Check if the path has at least six levels
+    return len(parts) >= n
+
 
 def print_cuda_memory_stats():
     if torch.cuda.is_available():

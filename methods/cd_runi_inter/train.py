@@ -23,6 +23,16 @@ from utils.eval import log
 from utils.eval import log_completion
 from utils.eval import make_plots
 
+def make_sampler(model_path, args):
+    sampler = MLPFlow(args).to(args.device)
+    try:
+        sampler.load_state_dict(torch.load(model_path))
+    except FileNotFoundError as e:
+        print('Specify a valid model checkpoint to load as and try again.')
+        sys.exit(1)
+    sampler.eval()
+    return sampler
+
 def gen_samples(model, args, batch_size=None, t=0.0, xt=None):
     model.eval()
     S, D = args.vocab_size, args.discrete_dim

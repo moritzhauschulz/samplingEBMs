@@ -50,7 +50,8 @@ def get_args():
     parser.add_argument('--eval_every', type=int, default=5000)
     parser.add_argument('--plot_every', type=int, default=2500)
     parser.add_argument('--lr', type=float, default=.0001)
-    parser.add_argument("--ebm_every", "--ee", type=int, default=1, help="EBM training frequency")
+    parser.add_argument("--gfn_iter_per_epoch", type=int, default=1, help="GFN training frequency")
+    parser.add_argument("--ebm_iter_per_epoch", type=int, default=1, help="EBM training frequency")
 
     # for GFN
     parser.add_argument("--type", type=str)

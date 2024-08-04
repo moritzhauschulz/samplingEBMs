@@ -13,6 +13,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import sys
 from filelock import FileLock, Timeout
+import re
 
 
 from utils.utils import get_batch_data
@@ -47,22 +48,34 @@ def ais_mcmc_step(args, x, energy_fn, step_size=0.1):
 
 
 
-def make_plots(log_path, output_dir='', reference_value=None, last_n=5):
+def make_plots(log_path, output_dir='', mmd_reference_value=None, nll_reference_value=None, last_n=5, mmd_lower_y_lim=None, mmd_upper_y_lim=None, nll_lower_y_lim=None, nlll_upper_y_lim=None):
 
     folder_path = os.path.dirname(log_path)
 
     if output_dir == '':
         epochs_output = folder_path + '/metrics_over_epochs.png'
         time_output = folder_path + '/metrics_over_time.png'
+        loss_output = folder_path + '/loss_over_epochs.png'
     else: 
         epochs_output = output_dir + '/metrics_over_epochs.png'
         time_output = output_dir + '/metrics_over_time.png'
+        loss_output = output_dir + '/loss_over_epochs.png'
 
     # Read the CSV file
     df = pd.read_csv(log_path)
 
     # Extract metrics dynamically from the first line (excluding 'epoch' and 'timestamp')
     metrics = df.columns[2:]  # Exclude 'epoch' and 'timestamp'
+
+    def extract_numeric_value(tensor_str):
+      # Use regular expression to find the numeric value
+      match = re.search(r'tensor\(([-+]?[0-9]*\.?[0-9]+[eE]?[-+]?[0-9]*),', tensor_str)
+      if match:
+          return float(match.group(1))
+      return None
+
+    for metric in metrics:
+      df[metric] = df[metric].apply(lambda x: extract_numeric_value(x) if isinstance(x, str) else x)
 
     def add_averages_text(ax, df, metrics):
         avg_text = f"Average of last {last_n} datapoints\n"
@@ -81,16 +94,17 @@ def make_plots(log_path, output_dir='', reference_value=None, last_n=5):
     ax1.set_xlabel('Epoch')
     ax1.set_ylabel('Value')
     ax1.set_title('Metrics over Epochs')
-    ax1.set_ylim(0,0.01)
+    if mmd_upper_y_lim is not None and mmd_lower_y_lim is not None:
+      ax1.set_ylim(mmd_lower_y_lim, mmd_upper_y_lim)
 
     # Plot other metrics on the left y-axis
     for metric in metrics:
-        if metric != 'ebm_nll':
+        if not metric in ['ebm_nll', 'loss']:
             ax1.plot(df['epoch'], df[metric], label=metric)
 
     # Add a dotted horizontal line for the reference value
-    if reference_value is not None:
-        ax1.axhline(y=reference_value, color='gray', linestyle='--', label=f'Reference value at {reference_value}')
+    if mmd_reference_value is not None:
+        ax1.axhline(y=mmd_reference_value, color='gray', linestyle='--', label=f'MMD reference value at {mmd_reference_value}')
 
     ax1.grid(True)
     ax1.legend(loc='upper left')
@@ -99,9 +113,13 @@ def make_plots(log_path, output_dir='', reference_value=None, last_n=5):
     if 'ebm_nll' in metrics:
         ax2 = ax1.twinx()
         ax2.set_ylabel('ebm_nll')
-        ax2.set_ylim(19,21)
+        if nll_lower_y_lim is not None and nlll_upper_y_lim is not None:
+          ax2.set_ylim(nll_lower_y_lim,nlll_upper_y_lim)
         ax2.plot(df['epoch'], df['ebm_nll'], color='tab:red', label='ebm_nll')
+        if nll_reference_value is not None:
+          ax2.axhline(y=nll_reference_value, color='red', linestyle='--', label=f'NLL reference value at {nll_reference_value}')
         ax2.legend(loc='lower right')
+
 
 
 
@@ -118,16 +136,18 @@ def make_plots(log_path, output_dir='', reference_value=None, last_n=5):
     ax1.set_xlabel('Timestamp')
     ax1.set_ylabel('Value')
     ax1.set_title('Metrics over Time')
-    ax1.set_ylim(0,0.01)
+    if mmd_upper_y_lim is not None and mmd_lower_y_lim is not None:
+      ax1.set_ylim(mmd_lower_y_lim, mmd_upper_y_lim)
+
 
     # Plot other metrics on the left y-axis
     for metric in metrics:
-        if metric != 'ebm_nll':
+        if not metric in ['ebm_nll', 'loss']:
             ax1.plot(df['timestamp'], df[metric], label=metric)
 
     # Add a dotted horizontal line for the reference value
-    if reference_value is not None:
-        ax1.axhline(y=reference_value, color='gray', linestyle='--', label=f'Reference value at {reference_value}')
+    if mmd_reference_value is not None:
+        ax1.axhline(y=mmd_reference_value, color='gray', linestyle='--', label=f'Reference value at {mmd_reference_value}')
 
     ax1.grid(True)
     ax1.legend(loc='upper left')
@@ -136,16 +156,49 @@ def make_plots(log_path, output_dir='', reference_value=None, last_n=5):
     if 'ebm_nll' in metrics:
         ax2 = ax1.twinx()
         ax2.set_ylabel('ebm_nll')
-        ax2.set_ylim(19,21)
+        if nll_lower_y_lim is not None and nlll_upper_y_lim is not None:
+          ax2.set_ylim(nll_lower_y_lim,nlll_upper_y_lim)
         ax2.plot(df['timestamp'], df['ebm_nll'], color='tab:red', label='ebm_nll')
         ax2.legend(loc='lower right')
 
-    # Add averages text
-    add_averages_text(ax1, df, metrics)
+    if 'loss' in metrics:
 
-    # Save the plot as a PNG file
-    plt.savefig(time_output)
-    plt.show()
+      loss_plot_metrics = ['loss']
+
+      # Plot metrics over time and save as PNG
+      fig, ax1 = plt.subplots(figsize=(12, 6))
+
+      ax1.set_xlabel('Timestamp')
+      ax1.set_ylabel('Value')
+      ax1.set_title('Metrics over Time')
+
+      # Plot other metrics on the left y-axis
+      ax1.plot(df['epoch'], df['loss'], label='loss')
+
+      ax1.grid(True)
+      ax1.legend(loc='upper left')
+
+      # Create a second y-axis for the main metric
+      if 'ebm_nll' in metrics:
+          ax2 = ax1.twinx()
+          ax2.set_ylabel('ebm_nll')
+          if nll_lower_y_lim is not None and nlll_upper_y_lim is not None:
+            ax2.set_ylim(nll_lower_y_lim,nlll_upper_y_lim)
+          ax2.plot(df['epoch'], df['ebm_nll'], color='tab:red', label='ebm_nll')
+          ax2.legend(loc='lower right')
+          loss_plot_metrics.append('ebm_nll')
+          if nll_reference_value is not None:
+            ax2.axhline(y=nll_reference_value, color='red', linestyle='--', label=f'NLL reference value at {nll_reference_value}')
+
+
+      # Add averages text
+      add_averages_text(ax1, df, loss_plot_metrics)
+
+      # Save the plot as a PNG file
+      plt.savefig(loss_output)
+      plt.show()
+
+    print('Saved plots...')
 
 
 def annealed_importance_sampling(args, score_fn, num_samples, num_intermediate, num_mcmc_steps, latent_dim):
