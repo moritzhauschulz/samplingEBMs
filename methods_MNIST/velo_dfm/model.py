@@ -81,7 +81,11 @@ class ResNetFlow(nn.Module):
     def __init__(self, n_channels, args):
         super().__init__()
         D = args.discrete_dim
-        S = args.vocab_size_with_mask
+        S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+        self.scheduler_noise = 1 if args.scheduler_type == 'quadratic_noise' else 0
+
+        if self.scheduler_noise:
+            S_noise = S
 
         self.x_proj_linear = nn.Sequential(
             nn.Linear(28*28, 1024),
@@ -102,6 +106,9 @@ class ResNetFlow(nn.Module):
         all = downsample + main
         self.net = nn.Sequential(*all)
         self.output_linear = nn.Linear(n_channels, D*S)
+        if self.scheduler_noise:
+            self.output_linear_noise = nn.Linear(n_channels, D*S_noise)
+
 
     def forward(self, xt, t):
         B, D = xt.shape
@@ -115,6 +122,9 @@ class ResNetFlow(nn.Module):
         h = self.net(input)
         h = h.view(h.size(0), h.size(1), -1).mean(-1)   # mean pooling: (B, C, D) -> (B, C)
 
-        out = self.output_linear(h)  # (B, C) -> (B, D*S)
-        #out = F.relu(out)
-        return out.reshape(B, D, -1)   # (B, D, S)
+        S_out = self.output_linear(h).reshape(B, D, -1)  # (B, C) -> (B, D*S)
+        if self.scheduler_noise:
+            S_noise_out = self.output_linear_noise(h).reshape(B, D, -1)
+        else:
+            S_noise_out = None
+        return S_out, S_noise_out    # (B, D, S)

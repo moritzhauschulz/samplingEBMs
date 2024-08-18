@@ -16,7 +16,7 @@ import re
 
 from utils.sampler import GibbsSampler 
 
-def plot_weight_histogram(weights_tensor, output_dir=None, bins=10, title='Histogram of Weights'):
+def plot_weight_histogram(weights_tensor, output_dir=None, bins=1000, title='Histogram of Weights'):
     """
     Plots a histogram of the weights in the given tensor.
 

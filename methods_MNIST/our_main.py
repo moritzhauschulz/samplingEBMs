@@ -2,7 +2,7 @@ import os
 import torch
 import shutil
 import argparse
-import json
+import json 
 import numpy as np
 import datetime
 
@@ -13,15 +13,18 @@ from punidb.train import main_loop as punidb_main_loop
 
 from runidb.train import main_loop as runidb_main_loop
 from punidb.train import main_loop as punidb_main_loop
-from velo_mask_dfm.train import main_loop as velo_mask_dfm_main_loop
-from velo_uni_dfm.train import main_loop as velo_uni_dfm_main_loop
-from velo_uni_dfs.train import main_loop as velo_uni_dfs_main_loop
-from velo_mask_dfs.train import main_loop as velo_mask_dfs_main_loop
+from velo_dfm.train import main_loop as velo_dfm_main_loop
+# from velo_uni_dfm.train import main_loop as velo_uni_dfm_main_loop
+# from velo_uni_dfs.train import main_loop as velo_uni_dfs_main_loop
+from velo_dfs.train import main_loop as velo_dfs_main_loop
 from velo_efm.train import main_loop as velo_efm_main_loop
-from velo_uni_efm.train import main_loop as velo_uni_efm_main_loop
-from velo_mask_edfs.train import main_loop as velo_mask_edfs_main_loop
-from velo_uni_edfs.train import main_loop as velo_uni_edfs_main_loop
+# from velo_uni_efm.train import main_loop as velo_uni_efm_main_loop
+from velo_edfs.train import main_loop as velo_edfs_main_loop
+# from velo_uni_edfs.train import main_loop as velo_uni_edfs_main_loop
 from velo_efm_ebm.train import main_loop as velo_efm_ebm_main_loop
+from velo_efm_ebm_bootstrap.train import main_loop as velo_efm_ebm_bootstrap_main_loop
+from velo_efm_ebm_bootstrap_2.train import main_loop as velo_efm_ebm_bootstrap_2_main_loop
+
 
 # from methods.ed_ebm.train import main_loop as ed_ebm_main_loop
 # from methods.ebm_runi.train import main_loop as ebm_runi_main_loop
@@ -32,9 +35,10 @@ def get_args():
 
     parser.add_argument('--methods', type=str, default='punidb', 
         choices=[
-            'punidb', 'runidb','velo_mask_dfm', 'velo_uni_dfm',
-            'velo_mask_dfs', 'velo_uni_dfs', 'velo_efm', 'velo_uni_efm',
-            'velo_mask_edfs', 'velo_uni_edfs', 'velo_efm_ebm'
+            'punidb', 'runidb','velo_dfm',
+            'velo_dfs', 'velo_efm', 
+            'velo_edfs', 'velo_efm_ebm', 
+            'velo_efm_ebm_bootstrap', 'velo_efm_ebm_bootstrap_2'
         ],
     )
 
@@ -42,13 +46,13 @@ def get_args():
     parser.add_argument('--ebm_model', type=str, default='resnet-64')
     parser.add_argument('--checkpoint', type=str, default=None)
     parser.add_argument('--pretrained_ebm', type=str, default='./methods_MNIST/dl_ebm/figs/ebm/ckpt_static_mnist_dula_0.1.pt')
-    parser.add_argument('--base_dist', action='store_true')
     parser.add_argument('--p_control', type=float, default=0.0)
     parser.add_argument('--l2', type=float, default=0.0)
-    parser.add_argument('--save_sampling_steps', type=int, default=10000)
+    parser.add_argument('--save_sampling_steps', type=int, default=5000)
 
     # mcmc
-    parser.add_argument('--use_dula', type=int, default=0, choices=[0,1])
+    parser.add_argument('--MCMC_refinement', type=int, default=0)
+    parser.add_argument('--use_MCMC', type=int, default=0, choices=[0,1])
     parser.add_argument('--use_buffer', type=int, default=0, choices=[0,1])
     parser.add_argument('--sampler', type=str, default='dula')
     parser.add_argument('--seed', type=int, default=1234567)
@@ -59,22 +63,29 @@ def get_args():
     parser.add_argument('--buffer_init', type=str, default='mean')
     parser.add_argument('--step_size', type=float, default=0.1)
 
-    #training
-    parser.add_argument('--optimal_temp', type=int, default=1, choices=[0,1])
+    #dfs etc
+    parser.add_argument('--scheduler_type', type=str, default='quadratic', choices=['quadratic', 'quadratic_noise', 'linear'])
+    parser.add_argument('--scheduler_noise', type=int, default=0, choices=[1, 0])
+    parser.add_argument('--store_dfs_ema', type=int, default=0, choices=[0,1])
+    parser.add_argument('--start_temp', type=float, default=1.0)
+    #parser.add_argument('--end_temp', type=float, default=1.0)
+    parser.add_argument('--temp_decay', type=float, default=1)
+    parser.add_argument('--optimal_temp', type=int, default=0, choices=[0,1])
     parser.add_argument('--optimal_temp_use_median', type=int, default=1, choices=[0,1])
-    parser.add_argument('--optimal_temp_ema', type=float, default=0.9)
-    parser.add_argument('--bernoulli_step', type=int, default=1, choices=[0,1])
-    parser.add_argument('--source', type=str, default='mask', choices=['mask','uniform'])
+    parser.add_argument('--optimal_temp_ema', type=float, default=0)
+    parser.add_argument('--optimal_temp_diff', type=float, default=0.5)
+    parser.add_argument('--dfm_step', type=int, default=0, choices=[0,1])
+    parser.add_argument('--mixer_step', type=int, default=0, choices=[0,1])
+    parser.add_argument('--mixer_type', type=str, default='uniform', choices=['uniform','data_mean'])
+    parser.add_argument('--source', type=str, default='mask', choices=['mask','uniform','data','omniglot'])
     parser.add_argument('--dfs_warmup_iter', type=int, default=0)
     parser.add_argument('--dfs_per_ebm', type=int, default=1)
-    parser.add_argument('--warmup_iters', type=int, default=1000) #10000
-    parser.add_argument('--start_temp', type=float, default='1')
-    parser.add_argument('--end_temp', type=float, default='1')
+    parser.add_argument('--warmup_iters', type=int, default=100) #10000
     parser.add_argument('--dataset_name', type=str, default='static_mnist')
     parser.add_argument('--discrete_dim', type=int, default=28*28)
     parser.add_argument('--vocab_size', type=int, default=2)
     parser.add_argument('--ema', type=float, default=0.999)
-    parser.add_argument('--delta_t', type=float, default=0.01)
+    parser.add_argument('--delta_t', type=float, default=0.05)
     parser.add_argument('--eta', type=float, default=0)
     parser.add_argument('--impute_self_connections', type=int, default=1, choices=[0,1])
     parser.add_argument('--loss_weight', type=int, default=1, choices=[0,1])
@@ -92,10 +103,23 @@ def get_args():
     parser.add_argument('--test_batch_size', type=int, default=128)
 
     parser.add_argument('--num_epochs', default=200, type=int, help='num epochs')
-    parser.add_argument('--epoch_save', default=5, type=int, help='num epochs between save')
+    parser.add_argument('--epoch_save', default=1, type=int, help='num epochs between save')
+    parser.add_argument('--itr_save', default=0, type=int, help='num iters between save')
     parser.add_argument('--eval_every', type=int, default=50)
-    parser.add_argument('--eval_on', type=int, default=1, choices=[0,1])
+    parser.add_argument('--eval_on', type=int, default=0, choices=[0,1])
 
+    #init
+    parser.add_argument('--dfs_init_from_checkpoint', type=int, default=1, choices=[0,1])
+    parser.add_argument('--init_save_every', type=int, default=500)
+    parser.add_argument('--init_iter', type=int, default=1000)
+    parser.add_argument('--init_sampling_steps', type=int, default=100)
+    parser.add_argument('--base_dist', type=str, default='data_mean', choices=['uniform', 'data_mean', 'zero']) #note that 'uniform' is to be avoided as it just blows up the energy...
+
+    #bootstrap
+    parser.add_argument('--optional_step', type=int, default=0, choices=[0,1])
+    parser.add_argument('--alpha', type=float, default=0.25)
+    parser.add_argument('--recycle_dfs_sample', type=int, default=1, choices=[0,1])
+    
 
     args = parser.parse_args()
 

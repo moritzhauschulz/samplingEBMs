@@ -24,12 +24,11 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
     model.eval()
     S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
     D = args.discrete_dim
-
     # Variables, B, D for batch size and number of dimensions respectively
     B = batch_size if batch_size is not None else args.batch_size
-
     if args.source == 'mask':
         M = S - 1
+
     # Initialize xt with the mask index value if not provided
     if xt is None:
         if args.source == 'mask':
@@ -37,17 +36,28 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
         else:
             xt = torch.randint(0, S, (B, D)).to(args.device)
 
-    dt = args.delta_t  # Time step
     t = 0.0  # Initial time
 
     while t < 1.0:
+        if args.scheduler_type == 'quadratic':
+            a1 = (2 * t) / (1 - t ** 2)
+            b = -a1
+            #adaptive dt
+            dt = min(args.delta_t, torch.abs(1/b))
+        elif args.scheduler_type == 'linear':
+            a1 = 1 / (1 - t)
+            b = -a1
+            #adaptive dt
+            dt = min(args.delta_t, torch.abs(1/b))
+
+
         t_ = t * torch.ones((B,)).to(args.device)
         with torch.no_grad():
             x1_logits = model(xt, t_).to(args.device)
             x1_logits = F.softmax(x1_logits, dim=-1)
         delta_xt = torch.zeros((B,D,S)).to(args.device)
         delta_xt = delta_xt.scatter_(-1, xt[:, :, None], 1.0) 
-        ut = 1/(1-t) * (x1_logits - delta_xt)
+        ut = a1 * x1_logits + b * delta_xt
 
         step_probs = delta_xt + (ut * dt)
 
@@ -59,7 +69,6 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
         t += dt
 
         step_probs = step_probs.clamp(min=0) #can I avoid this?
-
 
         if t < 1.0 or not args.source == 'mask' :
             xt = Categorical(step_probs).sample() #(B,D)
@@ -84,8 +93,10 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
     return xt.detach().cpu().numpy()
 
 def compute_loss(ebm_model, temp, dfs_model, q_dist, xt, x1, t, args):
-    (B, D), S = x1.size(), args.vocab_size_with_mask
-    M = S - 1
+    B, D = args.batch_size, args.discrete_dim
+    S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+    if args.source == 'mask':
+        M = S - 1
 
     x1_logits = dfs_model(xt, t).to(args.device)
 
@@ -162,7 +173,6 @@ def compute_loss(ebm_model, temp, dfs_model, q_dist, xt, x1, t, args):
 def main_loop(args, verbose=False):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-
     my_print = args.my_print
 
     # load data
@@ -170,7 +180,6 @@ def main_loop(args, verbose=False):
     plot = lambda p, x: torchvision.utils.save_image(x.view(x.size(0),
                                                             args.input_size[0], args.input_size[1], args.input_size[2]),
                                                      p, normalize=True, nrow=int(x.size(0) ** .5))
-
     #load data for q distribution
     train_set, _, _ = vamp_utils.load_static_mnist(args, return_datasets=True)
 
@@ -238,14 +247,11 @@ def main_loop(args, verbose=False):
         pbar = tqdm(q_dist.loader) if verbose else q_dist.loader
     
         for it, (x, _) in enumerate(pbar):
-            # x, _ = q_dist.loader
             empirical_samples = preprocess(x).long().to(args.device)
             x1 = q_dist.sample(empirical_samples).to(args.device).long()
 
             B, D = args.batch_size, args.discrete_dim
             S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
-
-
             if args.source == 'mask':
                 M = S - 1
                 x0 = torch.ones((B,D)).to(args.device).long() * M
@@ -253,8 +259,14 @@ def main_loop(args, verbose=False):
                 x0 = torch.randint(0, S, (B, D)).to(args.device)
 
             t = torch.rand((B,)).to(args.device)
+
+            if args.scheduler_type == 'quadratic':
+                kappa = torch.square(t)
+            else:
+                kappa = t
+
             xt = x1.clone()
-            mask = torch.rand((B,D)).to(args.device) < (1 - t[:, None])
+            mask = torch.rand((B,D)).to(args.device) < (1 - kappa[:, None])
             xt[mask] = x0[mask]
 
             loss, acc, weights,temp = compute_loss(ebm_model, temp, dfs_model, q_dist, xt, x1, t, args)

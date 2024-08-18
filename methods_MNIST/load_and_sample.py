@@ -7,18 +7,21 @@ import numpy as np
 import datetime
 
 from utils.eval import log_args
-from velo_mask_dfm.train import load_and_sample as velo_mask_dfm_load_and_sample
+from velo_dfm.train import load_and_sample as velo_dfm_load_and_sample
 
 def get_args():
     parser = argparse.ArgumentParser(description='Pipeline')
 
-    parser.add_argument('--methods', type=str, default='punidb', 
+    parser.add_argument('--methods', type=str, default='velo_dfm', 
         choices=[
-            'punidb', 'runidb','velo_mask_dfm', 'velo_uni_dfm',
-            'velo_mask_dfs', 'velo_uni_dfs', 'velo_mask_efm', 'velo_uni_efm',
-            'velo_mask_edfs', 'velo_uni_edfs', 'velo_mask_efm_ebm'
+            'punidb', 'runidb','velo_dfm', 'velo_dfm',
+            'velo_dfs', 'velo_dfs', 'velo_efm', 'velo_efm',
+            'velo_edfs', 'velo_edfs', 'velo_efm_ebm'
         ],
     )
+    parser.add_argument('--scheduler_type', type=str, default='quadratic', choices=['quadratic', 'quadratic_noise', 'linear'])
+    parser.add_argument('--scheduler_noise', type=int, default=0, choices=[1, 0])
+    parser.add_argument('--source', type=str, default='data', choices=['mask','uniform','data'])
     parser.add_argument('--dataset_name', type=str, default='static_mnist')
     parser.add_argument('--checkpoint', type=str, default=None)
     parser.add_argument('--delta_t', type=float, default=0.01)
@@ -29,7 +32,7 @@ def get_args():
     parser.add_argument('--vocab_size', type=int, default=2)
     parser.add_argument('--gpu', type=int, default=0, help='-1: cpu; 0 - ?: specific gpu index')
     parser.add_argument('--batch_size', default=128, type=int, help='batch size')
-
+    parser.add_argument('--test_batch_size', type=int, default=128)
 
     args = parser.parse_args()
 

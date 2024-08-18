@@ -15,22 +15,26 @@ import utils.vamp_utils as vamp_utils
 from utils.eval import log
 from utils.eval import log_completion
 
-from velo_uni_edfs.model import ResNetFlow
-from velo_uni_edfs.model import EBM
-from velo_uni_edfs.model import Dataq
+from velo_edfs.model import ResNetFlow
+from velo_edfs.model import EBM
+from velo_edfs.model import Dataq
 
 
-def gen_samples(model, args, batch_size=None, t=0.0, xt=None):
+def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
     model.eval()
-    S, D = args.vocab_size, args.discrete_dim
-
+    S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+    D = args.discrete_dim
     # Variables, B, D for batch size and number of dimensions respectively
     B = batch_size if batch_size is not None else args.batch_size
+    if args.source == 'mask':
+        M = S - 1
 
     # Initialize xt with the mask index value if not provided
     if xt is None:
-        xt = torch.randint(0, S, (B, D)).to(args.device)
-
+        if args.source == 'mask':
+            xt = M * torch.ones((B, D), dtype=torch.long).to(args.device)
+        else:
+            xt = torch.randint(0, S, (B, D)).to(args.device)
 
     dt = args.delta_t  # Time step
     t = 0.0  # Initial time
@@ -53,13 +57,34 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None):
 
         step_probs = step_probs.clamp(min=0)
 
-        xt = Categorical(step_probs).sample() #(B,D)
+        if t < 1.0 or not args.source == 'mask' :
+            xt = Categorical(step_probs).sample() #(B,D)
+        else:
+            if print_stats:
+                if torch.any(xt == M):
+                    num_masked_entries = torch.sum(xt == M).item()
+                    print(f"Share of masked entries (over all entries) in the final but one tensor: {num_masked_entries/ (B * D)}")
+                    print(f"Forcing mask values into range...")
+                print(f'Share of samples with non-zero probability for at least one mask: {(step_probs[:,:,M].sum(dim=-1)>0.001).sum()/B}')
+            step_probs[:, :, M] = 0
+            step_probs_sum = step_probs.sum(dim=-1, keepdim=True)
+            zero_sum_mask = step_probs_sum == 0
+            if zero_sum_mask.any():
+                step_probs[zero_sum_mask.expand(-1, -1, S).bool() & (torch.arange(S).to(args.device) < M).unsqueeze(0).unsqueeze(0).expand(B, D, S)] = 1/M
+            # print(step_probs[zero_sum_mask.expand(-1, -1, S)])
+            xt = Categorical(step_probs).sample() # (B, D)
+            if torch.any(xt == M):
+                num_masked_entries = torch.sum(xt == M).item()
+                print(f"Forcing failed. Number of masked entries in the final tensor: {num_masked_entries}")
 
     return xt.detach().cpu().numpy()
 
-
 def compute_loss(ebm_model, temp, dfs_model, q_dist, xt, x1, t, args):
-    (B, D), S = x1.size(), args.vocab_size
+    B, D = args.batch_size, args.discrete_dim
+    S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+    if args.source == 'mask':
+        M = S - 1
+
 
     delta_xt = torch.zeros((B,D,S)).to(args.device)
     delta_xt = delta_xt.scatter_(-1, xt[:, :, None], 1.0) 
@@ -97,6 +122,8 @@ def compute_loss(ebm_model, temp, dfs_model, q_dist, xt, x1, t, args):
 
 
 def main_loop(args, verbose=False):
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     my_print = args.my_print
 
     # load data
@@ -104,7 +131,6 @@ def main_loop(args, verbose=False):
     plot = lambda p, x: torchvision.utils.save_image(x.view(x.size(0),
                                                             args.input_size[0], args.input_size[1], args.input_size[2]),
                                                      p, normalize=True, nrow=int(x.size(0) ** .5))
-
     #load data for q distribution
     train_set, _, _ = vamp_utils.load_static_mnist(args, return_datasets=True)
 
@@ -159,7 +185,7 @@ def main_loop(args, verbose=False):
 
     #set temperature
     temp = args.start_temp
-    temp_decay = args.end_temp/args.start_temp ** (1/args.num_epochs)
+    temp_decay = (args.end_temp/args.start_temp) ** (1/args.num_epochs)
 
     start_time = time.time()
     cum_eval_time = 0
@@ -170,12 +196,16 @@ def main_loop(args, verbose=False):
         pbar = tqdm(q_dist.loader) if verbose else q_dist.loader
     
         for it, (x, _) in enumerate(pbar):
-            # x, _ = q_dist.loader
             empirical_samples = preprocess(x).long().to(args.device)
             x1 = q_dist.sample(empirical_samples).to(args.device).long()
 
-            (B, D), S = x1.size(), args.vocab_size
-            x0 = torch.randint(0, S, (B, D)).to(args.device)
+            B, D = args.batch_size, args.discrete_dim
+            S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+            if args.source == 'mask':
+                M = S - 1
+                x0 = torch.ones((B,D)).to(args.device).long() * M
+            else:
+                x0 = torch.randint(0, S, (B, D)).to(args.device)
 
             t = torch.rand((B,)).to(args.device)
             xt = x1.clone()
@@ -202,6 +232,7 @@ def main_loop(args, verbose=False):
             log_entry = {'epoch':None,'timestamp':None}
             
             log_entry['loss'] = loss.item()
+            log_entry['temp'] = temp
             torch.save(ema_dfs_model.state_dict(), f'{args.ckpt_path}/ema_dfs_model_{epoch}.pt')
 
             plot(f'{args.sample_path}/q_samples_{epoch}_first_ten_types_{q_dist.get_last_is_empirical()[0:10].cpu().numpy()}.png', torch.tensor(x1).float())

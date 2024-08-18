@@ -2,6 +2,60 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
+
+class Dataq:
+    def __init__(self, args, bernoulli_mean=None):
+        assert 0 <= args.q_weight <= 1, "Q Weight parameter must be between 0 and 1."
+        
+        self.weight = args.q_weight
+        if bernoulli_mean is not None and self.weight > 0:
+            self.bernoulli_dist = torch.distributions.Bernoulli(probs=bernoulli_mean)
+        else:
+            self.weight = 0
+            print(f'Bernoulli weight set to zero.')
+        self.device = args.device
+        self.batch_size = args.batch_size
+        
+    def sample(self, empirical_samples):
+        num_empirical = int((1 - self.weight) * self.batch_size)
+        num_bernoulli = self.batch_size - num_empirical
+        
+        # Sample from empirical distribution
+        if num_empirical > 0 and num_empirical < self.batch_size:
+            empirical_indices = np.random.choice(self.batch_size, size=num_empirical, replace=False)
+            empirical_samples = empirical_samples[empirical_indices].to(self.device)
+            is_empirical = torch.ones((num_empirical,)).to(self.device)
+            empirical_log_likelihood = (torch.ones((self.num_empirical,)) * torch.log(torch.tensor(1/self.batch_size))).to(self.device) + torch.log(torch.tensor(1 - self.weight)).to(self.device)
+            bernoulli_samples = self.bernoulli_dist.sample((num_bernoulli,)).to(self.device)
+            bernoulli_log_likelihood = self.bernoulli_dist.log_prob(bernoulli_samples).sum(dim=-1).to(self.device) + torch.log(torch.tensor(self.weight)).to(self.device)
+            is_bernoulli = torch.zeros((num_bernoulli,)).to(self.device)
+            combined_samples = torch.cat([empirical_samples, bernoulli_samples])
+            indices = torch.randperm(combined_samples.size(0))
+            combined_samples = combined_samples[indices]
+            self.is_empirical = torch.cat([is_empirical,is_bernoulli])[indices]
+            self.last_log_likelihood = torch.cat([empirical_log_likelihood, bernoulli_log_likelihood])[indices]
+        elif num_bernoulli == 0:
+            empirical_indices = np.random.choice(self.batch_size, size=num_empirical, replace=False)
+            combined_samples = empirical_samples[empirical_indices]
+            is_empirical = torch.ones((num_empirical,)).to(self.device)
+            empirical_log_likelihood = (torch.ones((num_empirical,)) * torch.log(torch.tensor(1/self.batch_size))).to(self.device) + torch.log(torch.tensor(1 - self.weight)).to(self.device)
+            self.is_empirical = is_empirical
+            self.last_log_likelihood = empirical_log_likelihood
+        elif num_empirical == 0:
+            combined_samples = self.bernoulli_dist.sample((num_bernoulli,)).to(self.device)
+            bernoulli_log_likelihood = self.bernoulli_dist.log_prob(combined_samples).sum(dim=-1).to(self.device) + torch.log(torch.tensor(self.weight)).to(self.device)
+            is_bernoulli = torch.zeros((num_bernoulli,)).to(self.device)
+            self.is_empirical = is_bernoulli
+            self.last_log_likelihood = bernoulli_log_likelihood
+
+        return combined_samples
+    
+    def get_last_log_likelihood(self):
+        return self.last_log_likelihood
+
+    def get_last_is_empirical(self):
+        return self.is_empirical
 
 def timestep_embedding(timesteps, dim, max_period=10000):
     """
@@ -81,7 +135,8 @@ class ResNetFlow(nn.Module):
     def __init__(self, n_channels, args):
         super().__init__()
         D = args.discrete_dim
-        S = args.vocab_size
+        S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+
 
         self.x_proj_linear = nn.Sequential(
             nn.Linear(28*28, 1024),
@@ -118,3 +173,22 @@ class ResNetFlow(nn.Module):
         out = self.output_linear(h)  # (B, C) -> (B, D*S)
         #out = F.relu(out)
         return out.reshape(B, D, -1)   # (B, D, S)
+
+class EBM(nn.Module):
+    def __init__(self, net, mean=None):
+        super().__init__()
+        self.net = net
+        if mean is None:
+            self.mean = None
+        else:
+            self.mean = nn.Parameter(mean, requires_grad=False)
+
+    def forward(self, x):
+        if self.mean is None:
+            bd = 0.
+        else:
+            base_dist = torch.distributions.Bernoulli(probs=self.mean)
+            bd = base_dist.log_prob(x).sum(-1)
+
+        logp = self.net(x).squeeze()
+        return logp + bd

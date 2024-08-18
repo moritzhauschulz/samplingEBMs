@@ -81,7 +81,7 @@ class ResNetFlow(nn.Module):
     def __init__(self, n_channels, args):
         super().__init__()
         D = args.discrete_dim
-        S = args.vocab_size_with_mask
+        S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
 
         self.x_proj_linear = nn.Sequential(
             nn.Linear(28*28, 1024),
