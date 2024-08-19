@@ -46,7 +46,7 @@ def get_args():
     #ebm related
     parser.add_argument('--ebm_model', type=str, default='resnet-64')
     parser.add_argument('--checkpoint', type=str, default=None)
-    parser.add_argument('--pretrained_ebm', type=str, default='./methods_MNIST/dl_ebm/figs/ebm/ckpt_static_mnist_dula_0.1.pt')
+    parser.add_argument('--pretrained_ebm', type=str, default='auto')
     parser.add_argument('--p_control', type=float, default=0.0)
     parser.add_argument('--l2', type=float, default=0.0)
     parser.add_argument('--store_ebm_ema', type=int, default=1, choices=[0,1])
@@ -99,8 +99,6 @@ def get_args():
     parser.add_argument('--optimal_temp_ema', type=float, default=0)
     parser.add_argument('--optimal_temp_diff', type=float, default=0.5)
     parser.add_argument('--q', type=str, default='data_mean', choices=['data_mean','random'])
-
-
 
     #gfn related
     parser.add_argument('--print_every', "--pe", type=int, default=100)
@@ -161,10 +159,6 @@ def get_args():
     
     args = parser.parse_args()
 
-    #define standard pretrained ebm for each dataset!
-
-    #define ebm type based on dataset
-
     #imputed args
     args.model_has_noise = 1
     if args.methods in ['velo_dfm','velo_efm','velo_efm_ebm','velo_efm_ebm_bootstrap','velo_efm_ebm_bootstrap_2']:
@@ -190,9 +184,24 @@ def get_args():
     args.start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
     args.index_path = f'{args.save_dir}/experiment_idx.json'
 
-    toy_dataset_list = ['swissroll','circles','moons','8gaussians','pinwheel','2spirals','checkerboard','line','cos']
+    toy_dataset_list = ['swissroll','circles','moons','8gaussians','pinwheel','2spirals','checkerboard']
     args.is_toy = args.dataset_name in toy_dataset_list
-    
+
+    #define standard pretrained ebms for toy
+    toy_data_pretrained = {
+        'swissroll': './methods_MNIST/ed_ebm/experiments/swissroll/swissroll_1/ckpts/model_100000.pt',
+        'circles': './methods_MNIST/ed_ebm/experiments/circles/circles_1/ckpts/model_100000.pt',
+        'moons': './methods_MNIST/ed_ebm/experiments/moons/moons_1/ckpts/model_100000.pt',
+        '8gaussians': './methods_MNIST/ed_ebm/experiments/8gaussians/8gaussians_1/ckpts/model_100000.pt',
+        'pinwheel':'./methods_MNIST/ed_ebm/experiments/pinwheel/pinwheel_1/ckpts/model_100000.pt',
+        '2spirals':'./methods_MNIST/ed_ebm/experiments/2spirals/2spirals_1/ckpts/model_100000.pt',
+        'checkerboard':'./methods_MNIST/ed_ebm/experiments/checkerboard/checkerboard_1/ckpts/model_100000.pt'
+    }
+    if args.is_toy and args.pretrained_ebm == 'auto':
+        args.pretrained_ebm = toy_data_pretrained[args.dataset_name]
+    elif args.pretrained_ebm == 'auto':
+        args.pretrained_ebm = './methods_MNIST/dl_ebm/figs/ebm/ckpt_static_mnist_dula_0.1.pt'
+
     return args
 
 if __name__ == '__main__':

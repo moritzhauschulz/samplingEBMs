@@ -15,6 +15,8 @@ from utils.utils import plot as toy_plot
 from utils.utils import get_x0
 from utils.eval import plot_weight_histogram
 
+from utils.sampler import GibbsSampler
+
 import utils.vamp_utils as vamp_utils
 from utils.eval import log
 from utils.eval import log_completion
@@ -23,9 +25,7 @@ from utils.eval import exp_hamming_mmd
 from utils.eval import rbf_mmd
 from utils.toy_data_lib import get_db
 
-from utils.model import ResNetFlow
-from utils.model import real_EBM
-from utils.model import MLPModel
+from utils.model import ResNetFlow, EBM, MLPModel, MLPScore
 
 from velo_dfm.train import gen_samples
 
@@ -126,7 +126,7 @@ def main_loop_real(args, verbose=False):
     if args.source == 'omniglot':
         og_args = copy.deepcopy(args)
         og_args.dataset_name == 'omniglot'
-        og_train_loader, og_val_loader, og_test_loader, args = vamp_utils.load_dataset(args)
+        og_train_loader, og_val_loader, og_test_loader, og_args = vamp_utils.load_dataset(og_args)
         source_train_loader = copy.deepcopy(og_train_loader)
         #can use the same plot function...
     else:
@@ -151,7 +151,7 @@ def main_loop_real(args, verbose=False):
         init_mean = (init_batch.mean(0) * (1. - 2 * eps) + eps).to(args.device)
         q_dist = torch.distributions.Bernoulli(probs=init_mean)
     elif args.q == 'random':
-        q_dist = torch.distributions.Bernoulli(probs=0.5 * torch.tensor((args.discrete_dim)))
+        q_dist = torch.distributions.Bernoulli(probs=0.5 * torch.tensor((args.discrete_dim)).to(args.device))
 
     # make dfs model
     dfs_model = ResNetFlow(64, args)
@@ -171,7 +171,7 @@ def main_loop_real(args, verbose=False):
     else:
         raise ValueError("invalid ebm_model definition")
 
-    ebm_model = real_EBM(net, init_mean).to(args.device)
+    ebm_model = EBM(net, init_mean).to(args.device)
     try:
         d = torch.load(args.pretrained_ebm)
         ebm_model.load_state_dict(d['ema_model'])
@@ -232,7 +232,7 @@ def main_loop_real(args, verbose=False):
             eval_start_time = time.time()
             #save models
             torch.save(dfs_model.state_dict(), f'{args.ckpt_path}/dfs_model_{epoch}.pt')
-            torch.save(ema_dfs_model.state_dict(), f'{args.ckpt_path}/dfs_ema_model_{epoch}.pt')
+            torch.save(ema_dfs_model.state_dict(), f'{args.ckpt_path}/ema_dfs_model_{epoch}.pt')
 
             #save samples
             if args.source == 'data':
@@ -261,4 +261,155 @@ def main_loop_real(args, verbose=False):
 
             log(args, log_entry, epoch, timestamp)
 
+def main_loop_toy(args, verbose=False):
 
+    # load data
+    db = get_db(args)
+    plot = lambda p, x: toy_plot(p, x, args)
+
+    if args.q == 'data_mean':
+        samples = get_batch_data(db, args, batch_size=10000)
+        eps = 1e-2
+        init_mean = torch.from_numpy(np.mean(samples, axis=0) * (1. - 2 * eps) + eps).to(args.device)
+        q_dist = torch.distributions.Bernoulli(probs=init_mean)
+    elif args.q == 'random':
+        q_dist = torch.distributions.Bernoulli(probs=0.5 * torch.tensor((args.discrete_dim).to(args.device)))
+    else:
+        print(f'Type {args.q} of q distribution not supported...')
+        sys.exit(0)
+
+    # make model
+    dfs_model = MLPModel(args).to(args.device)
+    ema_dfs_model = copy.deepcopy(dfs_model)
+    optimizer = torch.optim.Adam(dfs_model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    # make ebm model
+    net = MLPScore(args.discrete_dim, [256] * 3 + [1]).to(args.device)
+    ebm_model = EBM(net).to(args.device)
+    try:
+        ebm_model.load_state_dict(torch.load(f'./{args.pretrained_ebm}'))
+        print(f'successfully loaded EBM...')
+    except FileNotFoundError as e:
+        print('Training on EBM requires a trained EBM model. Specify a model checkpoint to load as --pretrained_ebm and try again.')
+        sys.exit(1)
+    ebm_model.eval()
+    utils.plot_heat(ebm_model, db.f_scale, args.bm, f'{args.plot_path}/initial_heat.png', args)
+
+    # move to cuda
+    dfs_model.to(args.device)
+    ema_dfs_model.to(args.device)
+    ebm_model.to(args.device)
+
+    #set temperature
+    temp = args.start_temp
+
+    start_time = time.time()
+    cum_eval_time = 0
+
+    pbar = tqdm(range(1, args.num_epochs + 1)) if verbose else range(1,args.num_epochs + 1)
+    for epoch in pbar:
+        dfs_model.train()
+        ebm_model.eval()
+
+        (B, D) = args.batch_size, args.discrete_dim
+        x1 = q_dist.sample((B,)).to(args.device).long()
+        S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+        t = torch.rand((B,)).to(args.device)
+
+        if args.source == 'data':
+            x0 = torch.from_numpy(get_batch_data(db, args)).to(args.device)  
+        else:
+            x0 = get_x0(B,D,S,args)
+
+        log_p_prob = -ebm_model(x1.float())
+
+        log_q_prob = q_dist.log_prob(x1.float()).sum(dim=-1).to(args.device)
+
+        loss, weights, temp = compute_loss(dfs_model, B, D, S, log_p_prob, log_q_prob, t, x1, x0, args, temp)
+        
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # update ema_model
+        for p, ema_p in zip(dfs_model.parameters(), ema_dfs_model.parameters()):
+            ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
+
+        if verbose:
+            pbar.set_description(f'Epoch {epoch}, Loss {loss.item()}, Temp {temp}')
+
+        if (epoch % args.plot_every == 0) or (epoch == args.num_epochs):
+            eval_start_time = time.time()
+
+            #save samples
+            if args.source == 'data':
+                xt = torch.from_numpy(get_batch_data(db, args, batch_size = 2500)).to(args.device)
+                plot(f'{args.sample_path}/source_{epoch}.png', xt)
+            else:
+                xt = None
+            samples = gen_samples(dfs_model, args, batch_size = 2500, xt=xt)
+            plot(f'{args.sample_path}/dfs_samples_{epoch}.png', torch.tensor(samples).float())
+            ema_samples = gen_samples(ema_dfs_model, args, batch_size = 2500, xt=xt)
+            plot(f'{args.sample_path}/ema_dfs_samples_{epoch}.png', torch.tensor(ema_samples).float())
+            weights_dir = f'{args.plot_path}/weights_histogram_{epoch}.png'
+            if not os.path.exists(weights_dir):
+                plot_weight_histogram(weights, output_dir=weights_dir)
+            
+            #save models
+            torch.save(dfs_model.state_dict(), f'{args.ckpt_path}/dfs_model_{epoch}.pt')
+            torch.save(ema_dfs_model.state_dict(), f'{args.ckpt_path}/ema_dfs_model_{epoch}.pt')
+
+            #log
+            log_entry = {'epoch':None,'timestamp':None}
+            log_entry['loss'] = loss.item()
+            log_entry['temp'] = temp
+            log_entry['mean_weight'] = weights.mean().item()
+            
+            #compute mmds 1/2
+            exp_hamming_mmd_list = []
+            rbf_mmd_list = []
+            for _ in range(10):
+                if args.source == 'data':
+                    xt = torch.from_numpy(get_batch_data(db, args, batch_size = 4000)).to(args.device)
+                    plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
+                else:
+                    xt = None
+                x = torch.from_numpy(gen_samples(dfs_model, args, batch_size = 4000, xt=xt)).to('cpu')
+                y = get_batch_data(db, args, batch_size=4000)
+                y = torch.from_numpy(np.float32(y)).to('cpu')
+                hamming_mmd, bandwidth = exp_hamming_mmd(x,y,args)
+                euclidean_mmd, sigma = rbf_mmd(x,y,args)
+                exp_hamming_mmd_list.append(hamming_mmd)
+                rbf_mmd_list.append(euclidean_mmd)
+            hamming_mmd = sum(exp_hamming_mmd_list)/10
+            euclidean_mmd = sum(rbf_mmd_list)/10
+
+            #log
+            log_entry['sampler_hamming_mmd'], log_entry['sampler_bandwidth'] = hamming_mmd.item(), bandwidth.item()
+            log_entry['sampler_euclidean_mmd'], log_entry['sampler_sigma'] = euclidean_mmd.item(), sigma.item()
+
+            #compute mmds 2/2
+            exp_hamming_mmd_list = []
+            rbf_mmd_list = []
+            gibbs_sampler = GibbsSampler(2, args.discrete_dim, args.device)
+            for _ in range(10):
+                if args.source == 'data':
+                    xt = torch.from_numpy(get_batch_data(db, args, batch_size = 4000)).to(args.device)
+                    plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
+                else:
+                    xt = None
+                x = torch.from_numpy(gen_samples(dfs_model, args, batch_size = 4000, xt=xt)).to('cpu')
+                y = gibbs_sampler(ebm_model, num_rounds=100, num_samples=4000).to('cpu')
+                hamming_mmd, bandwidth = exp_hamming_mmd(x,y,args)
+                euclidean_mmd, sigma = rbf_mmd(x,y,args)
+                exp_hamming_mmd_list.append(hamming_mmd)
+                rbf_mmd_list.append(euclidean_mmd)
+            hamming_mmd = sum(exp_hamming_mmd_list)/10
+            euclidean_mmd = sum(rbf_mmd_list)/10
+
+            #log
+            log_entry['sampler_ebm_hamming_mmd'], log_entry['sampler_ebm_bandwidth'] = hamming_mmd.item(), bandwidth.item()
+            log_entry['sampler_ebm_euclidean_mmd'], log_entry['sampler_ebm_sigma'] = euclidean_mmd.item(), sigma.item()
+
+            timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
+            log(args, log_entry, epoch, timestamp)

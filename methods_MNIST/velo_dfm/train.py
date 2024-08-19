@@ -176,7 +176,7 @@ def main_loop_real(args, verbose=False):
     if args.source == 'omniglot':
         og_args = copy.deepcopy(args)
         og_args.dataset_name == 'omniglot'
-        og_train_loader, og_val_loader, og_test_loader, args = vamp_utils.load_dataset(args)
+        og_train_loader, og_val_loader, og_test_loader, og_args = vamp_utils.load_dataset(og_args)
         source_train_loader = copy.deepcopy(og_train_loader)
         #can use the same plot function...
     else:
@@ -269,7 +269,6 @@ def main_loop_toy(args, verbose=False):
 
     # load data
     db = get_db(args)
-
     plot = lambda p, x: toy_plot(p, x, args)
 
     # make model
@@ -284,7 +283,7 @@ def main_loop_toy(args, verbose=False):
     start_time = time.time()
     cum_eval_time = 0
 
-    pbar = tqdm(range(1,args.num_epochs + 1)) if verbose else range(1,args.num_epochs + 1)
+    pbar = tqdm(range(1, args.num_epochs + 1)) if verbose else range(1,args.num_epochs + 1)
     for epoch in pbar:
         model.train()
 
@@ -339,7 +338,7 @@ def main_loop_toy(args, verbose=False):
             rbf_mmd_list = []
             for _ in range(10):
                 if args.source == 'data':
-                    xt = torch.from_numpy(get_batch_data(db, args, batch_size = 2500)).to(args.device)
+                    xt = torch.from_numpy(get_batch_data(db, args, batch_size = 4000)).to(args.device)
                     plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
                 else:
                     xt = None

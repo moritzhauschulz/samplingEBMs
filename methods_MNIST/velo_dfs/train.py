@@ -195,7 +195,7 @@ def main_loop_real(args, verbose=False):
     if args.source == 'omniglot':
         og_args = copy.deepcopy(args)
         og_args.dataset_name == 'omniglot'
-        og_train_loader, og_val_loader, og_test_loader, args = vamp_utils.load_dataset(args)
+        og_train_loader, og_val_loader, og_test_loader, og_args = vamp_utils.load_dataset(og_args)
         source_train_loader = copy.deepcopy(og_train_loader)
         #can use the same plot function...
     else:

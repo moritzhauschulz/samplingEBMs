@@ -59,6 +59,7 @@ python -u methods_MNIST/main.py --dataset_name 2spirals --lr 0.0001 --delta_t 0.
 python -u methods_MNIST/main.py --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+wait 
 
 #circles dfm
 python -u methods_MNIST/main.py --dataset_name circles --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
@@ -72,7 +73,7 @@ python -u methods_MNIST/main.py --dataset_name circles --lr 0.0001 --delta_t 0.0
 python -u methods_MNIST/main.py --dataset_name circles --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --dataset_name circles --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --dataset_name circles --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-wait 
+
 
 #circles dfs
 python -u methods_MNIST/main.py --dataset_name circles --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
@@ -86,6 +87,7 @@ python -u methods_MNIST/main.py --dataset_name circles --lr 0.0001 --delta_t 0.0
 python -u methods_MNIST/main.py --dataset_name circles --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --dataset_name circles --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --dataset_name circles --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+wait 
 
 #swissroll dfm
 python -u methods_MNIST/main.py --dataset_name swissroll --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
@@ -139,7 +141,7 @@ python -u methods_MNIST/main.py --dataset_name moons --lr 0.0001 --delta_t 0.05 
 python -u methods_MNIST/main.py --dataset_name moons --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --dataset_name moons --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --dataset_name moons --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-
+wait 
 
 #pinwheel dfm
 python -u methods_MNIST/main.py --dataset_name pinwheel --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
@@ -153,7 +155,7 @@ python -u methods_MNIST/main.py --dataset_name pinwheel --lr 0.0001 --delta_t 0.
 python -u methods_MNIST/main.py --dataset_name pinwheel --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --dataset_name pinwheel --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --dataset_name pinwheel --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-wait
+
 
 #pinwheel dfs
 python -u methods_MNIST/main.py --dataset_name pinwheel --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
@@ -167,7 +169,7 @@ python -u methods_MNIST/main.py --dataset_name pinwheel --lr 0.0001 --delta_t 0.
 python -u methods_MNIST/main.py --dataset_name pinwheel --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --dataset_name pinwheel --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --dataset_name pinwheel --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-
+wait 
 
 #checkerboard dfm
 python -u methods_MNIST/main.py --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))

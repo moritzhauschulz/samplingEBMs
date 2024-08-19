@@ -34,15 +34,15 @@ mkdir -p $output_date
 echo "Starting job ${filename} at $(date)"
 
 ############# SPECIFY JOB BELOW ################
-python -u methods_MNIST/our_main.py --delta_t 0.05 --methods velo_dfm --scheduler_type linear --source omniglot --num_epoch 300 --epoch_save 25 > ${output_date}/output1.log 2>&1 &
-python -u methods_MNIST/our_main.py --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic --source omniglot --epoch_save 25 --num_epoch 300 > ${output_date}/output2.log 2>&1 &
-python -u methods_MNIST/our_main.py --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source omniglot --epoch_save 25 --num_epoch 300 > ${output_date}/output3.log 2>&1 &
+python -u methods_MNIST/main.py --delta_t 0.05 --methods velo_dfm --scheduler_type linear --source omniglot --num_epoch 300 --epoch_save 25 > ${output_date}/output1.log 2>&1 &
+python -u methods_MNIST/main.py --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic --source omniglot --epoch_save 25 --num_epoch 300 > ${output_date}/output2.log 2>&1 &
+python -u methods_MNIST/main.py --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source omniglot --epoch_save 25 --num_epoch 300 > ${output_date}/output3.log 2>&1 &
 wait 
 
-# python -u methods_MNIST/our_main.py --delta_t 0.05 --methods velo_dfs --scheduler_type linear --source omniglot --num_epoch 300 --epoch_save 25 > ${output_date}/output4.log 2>&1 &
-# python -u methods_MNIST/our_main.py --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic --source omniglot --epoch_save 25 --num_epoch 300 > ${output_date}/output5.log 2>&1 &
-# python -u methods_MNIST/our_main.py --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source omniglot --epoch_save 25 --num_epoch 300 > ${output_date}/output6.log 2>&1 &
-# wait 
+python -u methods_MNIST/main.py --delta_t 0.05 --methods velo_dfs --scheduler_type linear --source omniglot --num_epoch 300 --epoch_save 300 > ${output_date}/output4.log 2>&1 &
+python -u methods_MNIST/main.py --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic --source omniglot --epoch_save 25 --num_epoch 300 > ${output_date}/output5.log 2>&1 &
+python -u methods_MNIST/main.py --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source omniglot --epoch_save 25 --num_epoch 300 > ${output_date}/output6.log 2>&1 &
+wait 
 
 
 ############# SPECIFY JOB ABOVE ################

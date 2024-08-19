@@ -195,4 +195,4 @@ class EBM(nn.Module):
             bd = base_dist.log_prob(x).sum(-1)
 
         logp = self.net(x).squeeze()
-        return logp + bd
+        return logp - bd # or +?
