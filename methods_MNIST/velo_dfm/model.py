@@ -128,3 +128,53 @@ class ResNetFlow(nn.Module):
         else:
             S_noise_out = None
         return S_out, S_noise_out    # (B, D, S)
+
+class MLPModel(nn.Module):
+    def __init__(self, args):
+        super(MLPModel, self).__init__()
+
+        D = args.discrete_dim
+        S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+        self.model_has_noise = args.model_has_noise
+        if self.model_has_noise:
+            S_noise = S
+        self.relu = args.relu
+        
+        self.embedding = nn.Embedding(args.vocab_size_with_mask, 16)
+        self.net = nn.Sequential(
+            nn.Linear((16+1) * D, 1024),
+            Swish(),
+            nn.Linear(1024, 1024),
+            Swish(),
+            nn.Linear(1024, 1024),
+            Swish(),
+        )
+
+        self.output_linear = nn.Sequential(
+            nn.Linear(1024, D * S)
+        )
+        if self.model_has_noise:
+            self.output_linear_noise = nn.Sequential(
+                nn.Linear(1024, D * S_noise),
+            )
+    
+    def forward(self, x, t):
+        B, D = x.shape
+
+        x_emb = self.embedding(x)   # (B, D, 16)
+        t_expanded = t[:, None, None].repeat(1, D, 1) 
+
+        net_input = torch.cat([x_emb, t_expanded], dim=-1).reshape(B, -1) # (B, D * 17)
+        
+        h = self.net(net_input)
+
+        S_out = self.output_linear(h).reshape(B, D, -1)  # (B, C) -> (B, D*S)
+        if self.relu:
+            S_out = F.relu(S_out)
+        if self.model_has_noise:
+            S_noise_out = self.output_linear_noise(h).reshape(B, D, -1)
+            if self.relu:
+                S_noise_out = F.relu(S_noise_out)
+        else:
+            S_noise_out = None
+        return S_out, S_noise_out    # (B, D, S)

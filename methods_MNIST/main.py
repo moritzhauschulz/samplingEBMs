@@ -95,6 +95,7 @@ def get_args():
     parser.add_argument('--init_iter', type=int, default=1000)
     parser.add_argument('--init_sampling_steps', type=int, default=100)
     parser.add_argument('--base_dist', type=str, default='data_mean', choices=['uniform', 'data_mean', 'zero']) #note that 'uniform' is to be avoided as it just blows up the energy...
+    parser.add_argument('--relu', type=int, default=0, choices=[0,1])
 
     #gfn related
     parser.add_argument('--print_every', "--pe", type=int, default=100)
@@ -160,6 +161,11 @@ def get_args():
     #define ebm type based on dataset
 
     #imputed args
+    args.model_has_noise = 1
+    if args.methods in ['velo_dfm','velo_efm','velo_efm_ebm','velo_efm_ebm_bootstrap','velo_efm_ebm_bootstrap_2']:
+        if args.scheduler_type == 'quadratic_noise':
+            args.model_has_noise = 1
+
     gpu = args.gpu
     if torch.cuda.is_available() and gpu >= 0:
         torch.cuda.set_device(gpu)
@@ -178,30 +184,10 @@ def get_args():
     start_time = datetime.datetime.now()
     args.start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
     args.index_path = f'{args.save_dir}/experiment_idx.json'
-    
-    # #toy data related
-    # toy_dataset_list = ['swissroll','circles','moons','8gaussians','pinwheel','2spirals','checkerboard','line','cos']
-    # args.is_toy = args.dataset_name in toy_dataset_list
-    # if args.is_toy:
-    #     if args.vocab_size == 2:
-    #         args.discrete_dim = 32
-    #         db, bm, inv_bm = utils.setup_data(args)
-    #         args.bm = bm
-    #         args.inv_bm = inv_bm
-    #     else:
-    #         db = utils.our_setup_data(args)
-    #     if os.path.exists(f'{args.data_dir}/toy_data_stats.csv'):
-    #         toy_data_stats = pd.read_csv(f'{args.data_dir}/toy_data_stats.csv')
-    #     else:
-    #         print('First run "compute_toy_data_stats.py", then try again.')
-    #         sys.exit(0)
-    #     args.hamming_mmd_mean = toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'hamming_mean_mmd'].values[0]
-    #     args.hamming_mmd_var =  toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'hamming_var_mmd'].values[0]
-    #     args.hamming_bandwidth_base_stats =  toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'bandwidth'].values[0]
-    #     args.euclidean_mmd_mean = toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'euclidean_mean_mmd'].values[0]
-    #     args.euclidean_mmd_var = toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'euclidean_var_mmd'].values[0]
-    #     args.euclidean_sigma_base_stats = toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'sigma'].values[0]
 
+    toy_dataset_list = ['swissroll','circles','moons','8gaussians','pinwheel','2spirals','checkerboard','line','cos']
+    args.is_toy = args.dataset_name in toy_dataset_list
+    
     return args
 
 if __name__ == '__main__':

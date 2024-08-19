@@ -574,3 +574,4 @@ def plot_sampler(score_func, out_file, args):
         samples.append(bin2float(init_samples.data.cpu().numpy(), args.inv_bm, args.discrete_dim, args.int_scale))
     samples = np.concatenate(samples, axis=0)
     plot_samples(samples, out_file, im_size=4.1)
+

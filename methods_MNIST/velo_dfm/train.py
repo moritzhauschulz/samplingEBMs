@@ -8,50 +8,66 @@ import time
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 
+import utils.utils as utils
 import utils.vamp_utils as vamp_utils
 from utils.eval import log
 from utils.eval import log_completion
+from utils.eval import get_eval_timestamp
+from utils.eval import exp_hamming_mmd
+from utils.eval import rbf_mmd
+
+from utils.toy_data_lib import get_db
 
 from velo_dfm.model import ResNetFlow
+from velo_dfm.model import MLPModel
 
-def load_and_sample(args):
-    model = ResNetFlow(64, args)
-
-    plot = lambda p, x: torchvision.utils.save_image(x.view(x.size(0),
-                                                            args.input_size[0], args.input_size[1], args.input_size[2]),
-                                                     p, normalize=True, nrow=int(x.size(0) ** .5))
-
-    try:
-        checkpoint = torch.load(args.checkpoint)
-        model.load_state_dict(checkpoint)
-        print(f'successfully loaded model...')
-    except FileNotFoundError as e:
-        print('Checkpoint not found.')
-        sys.exit(1)
-
-    def preprocess(data):
-        if args.dynamic_binarization:
-            return torch.bernoulli(data)
-        else:
-            return data
-            
-    def get_independent_sample(loader, args=args):
-        (x, _) = next(iter(loader))
-        return preprocess(x)
-
-
-    if args.source == 'data':
-        train_loader, val_loader, test_loader, args = vamp_utils.load_dataset(args)
-        xt = get_independent_sample(test_loader).long().to(args.device) 
-        plot(f'./source_{time.time()}.png', xt.float())
+def get_x0(B,D,S,args):
+    if args.source == 'mask':
+        M = S - 1
+        x0 = torch.ones((B,D)).to(args.device).long() * M
+    elif args.source == 'uniform':
+        x0 = torch.randint(0, S, (B, D)).to(args.device)     
     else:
-        xt = None
+        raise NotImplementedError("This dataset-source combination is not supported")
 
-    model.to(args.device)
-    model_samples = gen_samples(model, args, xt=xt)
-    out = f'./samples_{time.time()}.png'
-    plot(out, torch.tensor(model_samples).float())
-    print(f'saved to {out}')
+    return x0
+
+def compute_loss(model,B,D,S,t,x1,x0,args):
+    if args.source == 'mask':
+        M = S - 1
+
+    if args.scheduler_type == 'quadratic_noise':
+        x_noise = torch.randint(0, S, (B, D)).to(args.device)
+    else:
+        x_noise = None
+    
+    if args.scheduler_type == 'linear':
+        kappa1 = t
+    elif args.scheduler_type == 'quadratic':
+        kappa1 = torch.square(t)
+    elif args.scheduler_type == 'quadratic_noise':
+        kappa1 = torch.square(t)
+        kappa2 = t - torch.square(t)
+
+    xt = x1.clone()
+    mask0 = torch.rand((B,D)).to(args.device) < (1 - kappa1[:, None])
+    xt[mask0] = x0[mask0]
+    if args.scheduler_type == 'quadratic_noise':
+        mask_noise = torch.rand((B,D)).to(args.device) < (kappa2/(1 - kappa1))[:, None]
+        mask_noise = mask_noise & mask0
+        xt[mask_noise] = x_noise[mask_noise]
+    
+    x1_logits, noise_logits = model(xt, t)
+
+    loss = F.cross_entropy(x1_logits.transpose(1,2), x1, reduction='none').sum(dim=-1)
+    if args.scheduler_type == 'quadratic_noise':
+        noise_loss = F.cross_entropy(noise_logits.transpose(1,2), x_noise, reduction='none').sum(dim=-1)
+        loss = loss + noise_loss
+
+    x_hat = torch.argmax(x1_logits, dim=-1)
+    acc = (x_hat == x1).float().mean().item()
+
+    return loss.mean(dim=0), acc
 
 def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
     model.eval()
@@ -123,7 +139,6 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
 
         step_probs = step_probs.clamp(min=0) #can I avoid this?
 
-
         if t < 1.0 or not args.source == 'mask':
             xt = Categorical(step_probs).sample() #(B,D)
         else:
@@ -146,42 +161,35 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
 
     return xt.detach().cpu().numpy()
 
-
-def compute_loss(model, xt, x1, t, args, x_noise=None):
-    B, D = args.batch_size, args.discrete_dim
-    S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
-    if args.source == 'mask':
-        M = S - 1
-
-    x1_logits, noise_logits = model(xt, t)
-
-    loss = F.cross_entropy(x1_logits.transpose(1,2), x1, reduction='none').sum(dim=-1)
-    if args.scheduler_noise:
-        noise_loss = F.cross_entropy(noise_logits.transpose(1,2), x_noise, reduction='none').sum(dim=-1)
-        loss = loss + noise_loss
-
-    x_hat = torch.argmax(x1_logits, dim=-1)
-    acc = (x_hat == x1).float().mean().item()
-
-    return loss.mean(dim=0), acc
-
 def main_loop(args, verbose=False):
+
+    #set random seeds
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    my_print = args.my_print
+
+    if args.is_toy:
+        main_loop_toy(args, verbose)
+    else:
+        main_loop_real(args, verbose)
+    log_completion(args.methods, args.dataset_name, args)
+
+def main_loop_real(args, verbose=False):
 
     # load data
     train_loader, val_loader, test_loader, args = vamp_utils.load_dataset(args)
     plot = lambda p, x: torchvision.utils.save_image(x.view(x.size(0),
                                                             args.input_size[0], args.input_size[1], args.input_size[2]),
-                                                     p, normalize=True, nrow=int(x.size(0) ** .5))
-
+                                                    p, normalize=True, nrow=int(x.size(0) ** .5))
+    
     # load omniglot
     if args.source == 'omniglot':
         og_args = copy.deepcopy(args)
         og_args.dataset_name == 'omniglot'
         og_train_loader, og_val_loader, og_test_loader, args = vamp_utils.load_dataset(args)
+        source_train_loader = copy.deepcopy(og_train_loader)
         #can use the same plot function...
+    else:
+        source_train_loader = copy.deepcopy(train_loader)
 
     def preprocess(data, args=args):
         if args.dynamic_binarization:
@@ -193,11 +201,6 @@ def main_loop(args, verbose=False):
         (x, _) = next(iter(loader))
         return preprocess(x, args)
 
-    if args.source == 'omniglot':
-        source_train_loader = copy.deepcopy(og_train_loader)
-    else:
-        source_train_loader = copy.deepcopy(train_loader)
-        
     # make model
     model = ResNetFlow(64, args)
     ema_model = copy.deepcopy(model)
@@ -219,41 +222,18 @@ def main_loop(args, verbose=False):
             x1 = preprocess(x).long().to(args.device)            
 
             (B, D) = x1.shape
-
             S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
-            if args.source == 'mask':
-                M = S - 1
-                x0 = torch.ones((B,D)).to(args.device).long() * M
-            elif args.source == 'uniform':
-                x0 = torch.randint(0, S, (B, D)).to(args.device)
-            elif args.source == 'data':
-                x0 = preprocess(x_source).long().to(args.device)
-            elif args.source == 'omniglot':
-                x0 = preprocess(x_source, args=og_args).long().to(args.device)     
-
-            if args.scheduler_type == 'quadratic_noise':
-                x_noise = torch.randint(0, S, (B, D)).to(args.device)
-
+            
             t = torch.rand((B,)).to(args.device)
 
-            if args.scheduler_type == 'linear':
-                kappa1 = t
-            elif args.scheduler_type == 'quadratic':
-                kappa1 = torch.square(t)
-            elif args.scheduler_type == 'quadratic_noise':
-                kappa1 = torch.square(t)
-                kappa2 = t - torch.square(t)
-
-            xt = x1.clone()
-            mask0 = torch.rand((B,D)).to(args.device) < (1 - kappa1[:, None])
-            xt[mask0] = x0[mask0]
-            if args.scheduler_type == 'quadratic_noise':
-                mask_noise = torch.rand((B,D)).to(args.device) < (kappa2/(1 - kappa1))[:, None]
-                mask_noise = mask_noise & mask0
-                xt[mask_noise] = x_noise[mask_noise]
-                loss, acc = compute_loss(model, xt, x1, t, args, x_noise)
+            if args.source == 'data':
+                x0 = preprocess(x_source).long().to(args.device)
+            elif args.source == 'omniglot':
+                x0 = preprocess(x_source, args=og_args).long().to(args.device)
             else:
-                loss, acc = compute_loss(model, xt, x1, t, args)
+                x0 = get_x0(B,D,S,args)
+
+            loss, acc = compute_loss(model,B,D,S,t,x1,x0,args)
 
             optimizer.zero_grad()
             loss.backward()
@@ -269,14 +249,11 @@ def main_loop(args, verbose=False):
         if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs):
             eval_start_time = time.time()
 
+            #save models
             torch.save(model.state_dict(), f'{args.ckpt_path}/model_{epoch}.pt')
-
-            log_entry = {'epoch':None,'timestamp':None}
-            
-            log_entry['loss'] = loss.item()
-            log_entry['acc'] = acc
             torch.save(ema_model.state_dict(), f'{args.ckpt_path}/ema_model_{epoch}.pt')
 
+            #save samples
             if args.source == 'data':
                 xt = get_independent_sample(test_loader).long().to(args.device) 
                 plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
@@ -285,16 +262,172 @@ def main_loop(args, verbose=False):
                 plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
             else:
                 xt = None
-
             samples = gen_samples(model, args, batch_size=args.batch_size, xt=xt)
             plot(f'{args.sample_path}/samples_{epoch}.png', torch.tensor(samples).float())
             ema_samples = gen_samples(ema_model, args, batch_size=100, xt=xt)
             plot(f'{args.sample_path}/ema_samples_{epoch}.png', torch.tensor(ema_samples).float())
-            eval_end_time = time.time()
-            eval_time = eval_end_time - eval_start_time
-            cum_eval_time += eval_time
-            timestamp = time.time() - cum_eval_time - start_time
+
+            #save log
+            log_entry = {'epoch':None,'timestamp':None}
+            log_entry['loss'] = loss.item()
+            log_entry['acc'] = acc
+            timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
 
             log(args, log_entry, epoch, timestamp)
-    log_completion(args.methods, args.dataset_name, args)
 
+def main_loop_toy(args, verbose=False):
+
+    # load data
+    db = get_db(args)
+
+    def get_batch_data(db, args, batch_size = None):
+        if batch_size is None:
+            batch_size = args.batch_size
+        bx = db.gen_batch(batch_size)
+        if args.vocab_size == 2:
+            bx = utils.float2bin(bx, args.bm, args.discrete_dim, args.int_scale)
+        else:
+            bx = utils.ourfloat2base(bx, args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
+        return bx
+
+    def plot(path, samples):
+        samples = samples.detach().cpu().numpy()
+        if args.vocab_size == 2:
+            float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
+        else:
+            float_samples = utils.ourbase2float(samples.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
+        utils.plot_samples(float_samples, path, im_size=4.1, im_fmt='png')
+
+
+    # make model
+    model = MLPModel(args).to(args.device)
+    ema_model = copy.deepcopy(model)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    # move to cuda
+    model.to(args.device)
+    ema_model.to(args.device)
+
+    start_time = time.time()
+    cum_eval_time = 0
+
+    pbar = tqdm(range(1,args.num_epochs + 1))
+    for epoch in range(1, args.num_epochs + 1):
+        model.train()
+
+        x1 = torch.from_numpy(get_batch_data(db, args)).to(args.device)          
+
+        (B, D) = x1.shape
+        S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+
+        x0 = get_x0(B,D,S,args)
+        
+        t = torch.rand((B,)).to(args.device)
+
+        if args.source == 'data':
+            x0 = torch.from_numpy(get_batch_data(db, args)).to(args.device)  
+        else:
+            x0 = get_x0(B,D,S,args)
+
+        loss, acc = compute_loss(model,B,D,S,t,x1,x0,args)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # update ema_model
+        for p, ema_p in zip(model.parameters(), ema_model.parameters()):
+            ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
+
+        if verbose:
+            pbar.set_description(f'Epoch {epoch} Loss {loss.item()}, Acc {acc}')
+
+        if (epoch % args.plot_every == 0) or (epoch == args.num_epochs):
+            eval_start_time = time.time()
+
+            #save samples
+            if args.source == 'data':
+                xt = get_x0(B,D,S,args, batch_size = 2500)
+                plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
+            else:
+                xt = None
+            samples = gen_samples(model, args, batch_size = 2500, xt=xt)
+            plot(f'{args.sample_path}/samples_{epoch}.png', torch.tensor(samples).float())
+            ema_samples = gen_samples(ema_model, args, batch_size=2500, xt=xt)
+            plot(f'{args.sample_path}/ema_samples_{epoch}.png', torch.tensor(ema_samples).float())
+            _, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
+        if (epoch % args.eval_every == 0) or (epoch == args.num_epochs):
+            eval_start_time = time.time()
+
+            #save models
+            torch.save(model.state_dict(), f'{args.ckpt_path}/model_{epoch}.pt')
+            torch.save(ema_model.state_dict(), f'{args.ckpt_path}/ema_model_{epoch}.pt')
+
+            #compute mmds
+            exp_hamming_mmd_list = []
+            rbf_mmd_list = []
+            for _ in range(10):
+                if args.source == 'data':
+                    xt = get_x0(B,D,S,args, batch_size = 4000)
+                    plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
+                else:
+                    xt = None
+                x = torch.from_numpy(gen_samples(model, args, batch_size = 4000, xt=xt)).to('cpu')
+                y = get_batch_data(db, args, batch_size=4000)
+                y = torch.from_numpy(np.float32(y)).to('cpu')
+                hamming_mmd, bandwidth = exp_hamming_mmd(x,y,args)
+                euclidean_mmd, sigma = rbf_mmd(x,y,args)
+                exp_hamming_mmd_list.append(hamming_mmd)
+                rbf_mmd_list.append(euclidean_mmd)
+            hamming_mmd = sum(exp_hamming_mmd_list)/10
+            euclidean_mmd = sum(rbf_mmd_list)/10
+
+            #log
+            log_entry = {'epoch':None,'timestamp':None}
+            log_entry['sampler_hamming_mmd'], log_entry['bandwidth'] = hamming_mmd.item(), bandwidth.item()
+            log_entry['sampler_euclidean_mmd'], log_entry['sigma'] = euclidean_mmd.item(), sigma.item()
+            log_entry['loss'] = loss.item()
+            log_entry['acc'] = loss.item()
+            timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
+            log(args, log_entry, epoch, timestamp)
+
+
+#unused
+def load_and_sample(args):
+    model = ResNetFlow(64, args)
+
+    plot = lambda p, x: torchvision.utils.save_image(x.view(x.size(0),
+                                                            args.input_size[0], args.input_size[1], args.input_size[2]),
+                                                     p, normalize=True, nrow=int(x.size(0) ** .5))
+
+    try:
+        checkpoint = torch.load(args.checkpoint)
+        model.load_state_dict(checkpoint)
+        print(f'successfully loaded model...')
+    except FileNotFoundError as e:
+        print('Checkpoint not found.')
+        sys.exit(1)
+
+    def preprocess(data):
+        if args.dynamic_binarization:
+            return torch.bernoulli(data)
+        else:
+            return data
+            
+    def get_independent_sample(loader, args=args):
+        (x, _) = next(iter(loader))
+        return preprocess(x)
+
+
+    if args.source == 'data':
+        train_loader, val_loader, test_loader, args = vamp_utils.load_dataset(args)
+        xt = get_independent_sample(test_loader).long().to(args.device) 
+        plot(f'./source_{time.time()}.png', xt.float())
+    else:
+        xt = None
+
+    model.to(args.device)
+    model_samples = gen_samples(model, args, xt=xt)
+    out = f'./samples_{time.time()}.png'
+    plot(out, torch.tensor(model_samples).float())
+    print(f'saved to {out}')

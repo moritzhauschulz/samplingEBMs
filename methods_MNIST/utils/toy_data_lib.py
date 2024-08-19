@@ -10,27 +10,24 @@ import utils.utils as utils
 
 def get_db(args):
   #toy data related
-  toy_dataset_list = ['swissroll','circles','moons','8gaussians','pinwheel','2spirals','checkerboard','line','cos']
-  args.is_toy = args.dataset_name in toy_dataset_list
-  if args.is_toy:
-    if args.vocab_size == 2:
-      args.discrete_dim = 32
-      db, bm, inv_bm = utils.setup_data(args)
-      args.bm = bm
-      args.inv_bm = inv_bm
-    else:
-      db = utils.our_setup_data(args)
-    if os.path.exists(f'{args.data_dir}/toy_data_stats.csv'):
-      toy_data_stats = pd.read_csv(f'{args.data_dir}/toy_data_stats.csv')
-    else:
-      print('First run "compute_toy_data_stats.py", then try again.')
-      sys.exit(0)
-    args.hamming_mmd_mean = toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'hamming_mean_mmd'].values[0]
-    args.hamming_mmd_var =  toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'hamming_var_mmd'].values[0]
-    args.hamming_bandwidth_base_stats =  toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'bandwidth'].values[0]
-    args.euclidean_mmd_mean = toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'euclidean_mean_mmd'].values[0]
-    args.euclidean_mmd_var = toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'euclidean_var_mmd'].values[0]
-    args.euclidean_sigma_base_stats = toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'sigma'].values[0]
+  if args.vocab_size == 2:
+    args.discrete_dim = 32
+    db, bm, inv_bm = utils.setup_data(args)
+    args.bm = bm
+    args.inv_bm = inv_bm
+  else:
+    db = utils.our_setup_data(args)
+  if os.path.exists(f'{args.data_dir}/toy_data_stats.csv'):
+    toy_data_stats = pd.read_csv(f'{args.data_dir}/toy_data_stats.csv')
+  else:
+    print('First run "compute_toy_data_stats.py", then try again.')
+    sys.exit(0)
+  args.hamming_mmd_mean = toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'hamming_mean_mmd'].values[0]
+  args.hamming_mmd_var =  toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'hamming_var_mmd'].values[0]
+  args.hamming_bandwidth_base_stats =  toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'bandwidth'].values[0]
+  args.euclidean_mmd_mean = toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'euclidean_mean_mmd'].values[0]
+  args.euclidean_mmd_var = toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'euclidean_var_mmd'].values[0]
+  args.euclidean_sigma_base_stats = toy_data_stats.loc[toy_data_stats['dataset_name'] == args.dataset_name, 'sigma'].values[0]
 
   return db
 

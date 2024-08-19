@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import sys
 from filelock import FileLock, Timeout
 import re
+import time
 
 from utils.utils import get_batch_data
 from utils.utils import print_cuda_memory_stats
@@ -651,3 +652,9 @@ def log_args(method, data, args):
   print(f"Experiment meta data saved to {args.index_path}")
   return args
 
+def get_eval_timestamp(eval_start_time, cum_eval_time, start_time):
+  eval_end_time = time.time()
+  eval_time = eval_end_time - eval_start_time
+  cum_eval_time += eval_time
+  timestamp = time.time() - cum_eval_time - start_time
+  return timestamp, cum_eval_time
