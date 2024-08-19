@@ -17,6 +17,7 @@ from sympy.combinatorics.graycode import GrayCode
 import json
 from utils import toy_data_lib
 from utils.sampler import GibbsSampler
+import utils.utils as utils
 
 def approx_difference_function(x, model):
     x = x.requires_grad_()
@@ -586,4 +587,21 @@ def get_x0(B,D,S,args):
 
     return x0
 
+def get_batch_data(db, args, batch_size = None):
+    if batch_size is None:
+        batch_size = args.batch_size
+    bx = db.gen_batch(batch_size)
+    if args.vocab_size == 2:
+        bx = utils.float2bin(bx, args.bm, args.discrete_dim, args.int_scale)
+    else:
+        bx = utils.ourfloat2base(bx, args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
+    return bx
+
+def plot(path, samples, args):
+    samples = samples.detach().cpu().numpy()
+    if args.vocab_size == 2:
+        float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
+    else:
+        float_samples = utils.ourbase2float(samples.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
+    utils.plot_samples(float_samples, path, im_size=4.1, im_fmt='png')
 

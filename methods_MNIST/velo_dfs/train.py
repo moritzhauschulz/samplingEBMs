@@ -8,6 +8,8 @@ import time
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 import utils.utils as utils
+from utils.utils import get_batch_data
+from utils.utils import plot as toy_plot
 from utils.utils import get_x0
 import utils.vamp_utils as vamp_utils
 from utils.eval import log
@@ -16,6 +18,7 @@ from utils.eval import get_eval_timestamp
 from utils.eval import exp_hamming_mmd
 from utils.eval import rbf_mmd
 from utils.toy_data_lib import get_db
+
 
 from utils.model import ResNetFlow
 from utils.model import MLPModel
@@ -278,5 +281,101 @@ def main_loop_real(args, verbose=False):
             log_entry['loss'] = loss.item()
             timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
 
+            log(args, log_entry, epoch, timestamp)
+
+def main_loop_toy(args, verbose=False):
+
+    # load data
+    db = get_db(args)
+
+    plot = lambda p, x: toy_plot(p, x, args)
+
+    # make model
+    model = MLPModel(args).to(args.device)
+    ema_model = copy.deepcopy(model)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    # move to cuda
+    model.to(args.device)
+    ema_model.to(args.device)
+
+    start_time = time.time()
+    cum_eval_time = 0
+
+    pbar = tqdm(range(1,args.num_epochs + 1)) if verbose else range(1,args.num_epochs + 1)
+    for epoch in pbar:
+        model.train()
+
+        x1 = torch.from_numpy(get_batch_data(db, args)).to(args.device)          
+
+        (B, D) = x1.shape
+        S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+        
+        t = torch.rand((B,)).to(args.device)
+
+        if args.source == 'data':
+            x0 = torch.from_numpy(get_batch_data(db, args)).to(args.device)  
+        else:
+            x0 = get_x0(B,D,S,args)
+
+        loss = compute_loss(model,B,D,S,t,x1,x0,args)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # update ema_model
+        for p, ema_p in zip(model.parameters(), ema_model.parameters()):
+            ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
+
+        if verbose:
+            pbar.set_description(f'Epoch {epoch} Loss {loss.item()}')
+
+        if (epoch % args.plot_every == 0) or (epoch == args.num_epochs):
+            eval_start_time = time.time()
+
+            #save samples
+            if args.source == 'data':
+                xt = torch.from_numpy(get_batch_data(db, args, batch_size = 2500)).to(args.device)
+                plot(f'{args.sample_path}/source_{epoch}.png', xt)
+            else:
+                xt = None
+            samples = gen_samples(model, args, batch_size = 2500, xt=xt)
+            plot(f'{args.sample_path}/samples_{epoch}.png', torch.tensor(samples).float())
+            ema_samples = gen_samples(ema_model, args, batch_size=2500, xt=xt)
+            plot(f'{args.sample_path}/ema_samples_{epoch}.png', torch.tensor(ema_samples).float())
+            _, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
+        if (epoch % args.eval_every == 0) or (epoch == args.num_epochs):
+            eval_start_time = time.time()
+
+            #save models
+            torch.save(model.state_dict(), f'{args.ckpt_path}/model_{epoch}.pt')
+            torch.save(ema_model.state_dict(), f'{args.ckpt_path}/ema_model_{epoch}.pt')
+
+            #compute mmds
+            exp_hamming_mmd_list = []
+            rbf_mmd_list = []
+            for _ in range(10):
+                if args.source == 'data':
+                    xt = torch.from_numpy(get_batch_data(db, args, batch_size = 2500)).to(args.device)
+                    plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
+                else:
+                    xt = None
+                x = torch.from_numpy(gen_samples(model, args, batch_size = 4000, xt=xt)).to('cpu')
+                y = get_batch_data(db, args, batch_size=4000)
+                y = torch.from_numpy(np.float32(y)).to('cpu')
+                hamming_mmd, bandwidth = exp_hamming_mmd(x,y,args)
+                euclidean_mmd, sigma = rbf_mmd(x,y,args)
+                exp_hamming_mmd_list.append(hamming_mmd)
+                rbf_mmd_list.append(euclidean_mmd)
+            hamming_mmd = sum(exp_hamming_mmd_list)/10
+            euclidean_mmd = sum(rbf_mmd_list)/10
+
+            #log
+            log_entry = {'epoch':None,'timestamp':None}
+            log_entry['sampler_hamming_mmd'], log_entry['bandwidth'] = hamming_mmd.item(), bandwidth.item()
+            log_entry['sampler_euclidean_mmd'], log_entry['sigma'] = euclidean_mmd.item(), sigma.item()
+            log_entry['loss'] = loss.item()
+            timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
             log(args, log_entry, epoch, timestamp)
 

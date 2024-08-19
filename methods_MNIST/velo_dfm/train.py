@@ -8,6 +8,8 @@ import time
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 import utils.utils as utils
+from utils.utils import get_batch_data
+from utils.utils import plot as toy_plot
 from utils.utils import get_x0
 import utils.vamp_utils as vamp_utils
 from utils.eval import log
@@ -16,6 +18,7 @@ from utils.eval import get_eval_timestamp
 from utils.eval import exp_hamming_mmd
 from utils.eval import rbf_mmd
 from utils.toy_data_lib import get_db
+
 
 from utils.model import ResNetFlow
 from utils.model import MLPModel
@@ -267,24 +270,7 @@ def main_loop_toy(args, verbose=False):
     # load data
     db = get_db(args)
 
-    def get_batch_data(db, args, batch_size = None):
-        if batch_size is None:
-            batch_size = args.batch_size
-        bx = db.gen_batch(batch_size)
-        if args.vocab_size == 2:
-            bx = utils.float2bin(bx, args.bm, args.discrete_dim, args.int_scale)
-        else:
-            bx = utils.ourfloat2base(bx, args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
-        return bx
-
-    def plot(path, samples):
-        samples = samples.detach().cpu().numpy()
-        if args.vocab_size == 2:
-            float_samples = utils.bin2float(samples.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
-        else:
-            float_samples = utils.ourbase2float(samples.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
-        utils.plot_samples(float_samples, path, im_size=4.1, im_fmt='png')
-
+    plot = lambda p, x: toy_plot(p, x, args)
 
     # make model
     model = MLPModel(args).to(args.device)
@@ -298,16 +284,14 @@ def main_loop_toy(args, verbose=False):
     start_time = time.time()
     cum_eval_time = 0
 
-    pbar = tqdm(range(1,args.num_epochs + 1))
-    for epoch in range(1, args.num_epochs + 1):
+    pbar = tqdm(range(1,args.num_epochs + 1)) if verbose else range(1,args.num_epochs + 1)
+    for epoch in pbar:
         model.train()
 
         x1 = torch.from_numpy(get_batch_data(db, args)).to(args.device)          
 
         (B, D) = x1.shape
         S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
-
-        x0 = get_x0(B,D,S,args)
         
         t = torch.rand((B,)).to(args.device)
 
@@ -334,8 +318,8 @@ def main_loop_toy(args, verbose=False):
 
             #save samples
             if args.source == 'data':
-                xt = get_x0(B,D,S,args, batch_size = 2500)
-                plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
+                xt = torch.from_numpy(get_batch_data(db, args, batch_size = 2500)).to(args.device)
+                plot(f'{args.sample_path}/source_{epoch}.png', xt)
             else:
                 xt = None
             samples = gen_samples(model, args, batch_size = 2500, xt=xt)
@@ -355,7 +339,7 @@ def main_loop_toy(args, verbose=False):
             rbf_mmd_list = []
             for _ in range(10):
                 if args.source == 'data':
-                    xt = get_x0(B,D,S,args, batch_size = 4000)
+                    xt = torch.from_numpy(get_batch_data(db, args, batch_size = 2500)).to(args.device)
                     plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
                 else:
                     xt = None
@@ -377,44 +361,3 @@ def main_loop_toy(args, verbose=False):
             log_entry['acc'] = loss.item()
             timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
             log(args, log_entry, epoch, timestamp)
-
-
-#unused
-def load_and_sample(args):
-    model = ResNetFlow(64, args)
-
-    plot = lambda p, x: torchvision.utils.save_image(x.view(x.size(0),
-                                                            args.input_size[0], args.input_size[1], args.input_size[2]),
-                                                     p, normalize=True, nrow=int(x.size(0) ** .5))
-
-    try:
-        checkpoint = torch.load(args.checkpoint)
-        model.load_state_dict(checkpoint)
-        print(f'successfully loaded model...')
-    except FileNotFoundError as e:
-        print('Checkpoint not found.')
-        sys.exit(1)
-
-    def preprocess(data):
-        if args.dynamic_binarization:
-            return torch.bernoulli(data)
-        else:
-            return data
-            
-    def get_independent_sample(loader, args=args):
-        (x, _) = next(iter(loader))
-        return preprocess(x)
-
-
-    if args.source == 'data':
-        train_loader, val_loader, test_loader, args = vamp_utils.load_dataset(args)
-        xt = get_independent_sample(test_loader).long().to(args.device) 
-        plot(f'./source_{time.time()}.png', xt.float())
-    else:
-        xt = None
-
-    model.to(args.device)
-    model_samples = gen_samples(model, args, xt=xt)
-    out = f'./samples_{time.time()}.png'
-    plot(out, torch.tensor(model_samples).float())
-    print(f'saved to {out}')
