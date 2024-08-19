@@ -575,3 +575,15 @@ def plot_sampler(score_func, out_file, args):
     samples = np.concatenate(samples, axis=0)
     plot_samples(samples, out_file, im_size=4.1)
 
+def get_x0(B,D,S,args):
+    if args.source == 'mask':
+        M = S - 1
+        x0 = torch.ones((B,D)).to(args.device).long() * M
+    elif args.source == 'uniform':
+        x0 = torch.randint(0, S, (B, D)).to(args.device)     
+    else:
+        raise NotImplementedError("This dataset-source combination is not supported")
+
+    return x0
+
+

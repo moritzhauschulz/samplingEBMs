@@ -7,79 +7,31 @@ from tqdm import tqdm
 import time
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
-
 import utils.utils as utils
+from utils.utils import get_x0
 import utils.vamp_utils as vamp_utils
 from utils.eval import log
 from utils.eval import log_completion
 from utils.eval import get_eval_timestamp
 from utils.eval import exp_hamming_mmd
 from utils.eval import rbf_mmd
-
 from utils.toy_data_lib import get_db
 
-from velo_dfm.model import ResNetFlow
-from velo_dfm.model import MLPModel
-
-def get_x0(B,D,S,args):
-    if args.source == 'mask':
-        M = S - 1
-        x0 = torch.ones((B,D)).to(args.device).long() * M
-    elif args.source == 'uniform':
-        x0 = torch.randint(0, S, (B, D)).to(args.device)     
-    else:
-        raise NotImplementedError("This dataset-source combination is not supported")
-
-    return x0
-
-def compute_loss(model,B,D,S,t,x1,x0,args):
-    if args.source == 'mask':
-        M = S - 1
-
-    if args.scheduler_type == 'quadratic_noise':
-        x_noise = torch.randint(0, S, (B, D)).to(args.device)
-    else:
-        x_noise = None
-    
-    if args.scheduler_type == 'linear':
-        kappa1 = t
-    elif args.scheduler_type == 'quadratic':
-        kappa1 = torch.square(t)
-    elif args.scheduler_type == 'quadratic_noise':
-        kappa1 = torch.square(t)
-        kappa2 = t - torch.square(t)
-
-    xt = x1.clone()
-    mask0 = torch.rand((B,D)).to(args.device) < (1 - kappa1[:, None])
-    xt[mask0] = x0[mask0]
-    if args.scheduler_type == 'quadratic_noise':
-        mask_noise = torch.rand((B,D)).to(args.device) < (kappa2/(1 - kappa1))[:, None]
-        mask_noise = mask_noise & mask0
-        xt[mask_noise] = x_noise[mask_noise]
-    
-    x1_logits, noise_logits = model(xt, t)
-
-    loss = F.cross_entropy(x1_logits.transpose(1,2), x1, reduction='none').sum(dim=-1)
-    if args.scheduler_type == 'quadratic_noise':
-        noise_loss = F.cross_entropy(noise_logits.transpose(1,2), x_noise, reduction='none').sum(dim=-1)
-        loss = loss + noise_loss
-
-    x_hat = torch.argmax(x1_logits, dim=-1)
-    acc = (x_hat == x1).float().mean().item()
-
-    return loss.mean(dim=0), acc
+from utils.model import ResNetFlow
+from utils.model import MLPModel
 
 def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
     model.eval()
     S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
     D = args.discrete_dim
-    # Variables, B, D for batch size and number of dimensions respectively
-    B = batch_size if batch_size is not None else args.batch_size
     if not xt is None:
         B = xt.shape[0]
+    else:
+        B = batch_size if batch_size is not None else args.batch_size
 
     if args.source == 'mask':
         M = S - 1
+        
     # Initialize xt with the mask index value if not provided
     if xt is None:
         if args.source == 'mask':
@@ -161,6 +113,43 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
 
     return xt.detach().cpu().numpy()
 
+def compute_loss(model,B,D,S,t,x1,x0,args):
+    if args.source == 'mask':
+        M = S - 1
+
+    if args.scheduler_type == 'quadratic_noise':
+        x_noise = torch.randint(0, S, (B, D)).to(args.device)
+    else:
+        x_noise = None
+    
+    if args.scheduler_type == 'linear':
+        kappa1 = t
+    elif args.scheduler_type == 'quadratic':
+        kappa1 = torch.square(t)
+    elif args.scheduler_type == 'quadratic_noise':
+        kappa1 = torch.square(t)
+        kappa2 = t - torch.square(t)
+
+    xt = x1.clone()
+    mask0 = torch.rand((B,D)).to(args.device) < (1 - kappa1[:, None])
+    xt[mask0] = x0[mask0]
+    if args.scheduler_type == 'quadratic_noise':
+        mask_noise = torch.rand((B,D)).to(args.device) < (kappa2/(1 - kappa1))[:, None]
+        mask_noise = mask_noise & mask0
+        xt[mask_noise] = x_noise[mask_noise]
+    
+    x1_logits, noise_logits = model(xt, t)
+
+    loss = F.cross_entropy(x1_logits.transpose(1,2), x1, reduction='none').sum(dim=-1)
+    if args.scheduler_type == 'quadratic_noise':
+        noise_loss = F.cross_entropy(noise_logits.transpose(1,2), x_noise, reduction='none').sum(dim=-1)
+        loss = loss + noise_loss
+
+    x_hat = torch.argmax(x1_logits, dim=-1)
+    acc = (x_hat == x1).float().mean().item()
+
+    return loss.mean(dim=0), acc
+
 def main_loop(args, verbose=False):
 
     #set random seeds
@@ -180,7 +169,6 @@ def main_loop_real(args, verbose=False):
     plot = lambda p, x: torchvision.utils.save_image(x.view(x.size(0),
                                                             args.input_size[0], args.input_size[1], args.input_size[2]),
                                                     p, normalize=True, nrow=int(x.size(0) ** .5))
-    
     # load omniglot
     if args.source == 'omniglot':
         og_args = copy.deepcopy(args)
@@ -223,7 +211,6 @@ def main_loop_real(args, verbose=False):
 
             (B, D) = x1.shape
             S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
-            
             t = torch.rand((B,)).to(args.device)
 
             if args.source == 'data':

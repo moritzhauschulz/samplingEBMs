@@ -7,12 +7,18 @@ from tqdm import tqdm
 import time
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
-
+import utils.utils as utils
+from utils.utils import get_x0
 import utils.vamp_utils as vamp_utils
 from utils.eval import log
 from utils.eval import log_completion
+from utils.eval import get_eval_timestamp
+from utils.eval import exp_hamming_mmd
+from utils.eval import rbf_mmd
+from utils.toy_data_lib import get_db
 
-from velo_dfs.model import ResNetFlow
+from utils.model import ResNetFlow
+from utils.model import MLPModel
 
 def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
     model.eval()
@@ -34,6 +40,7 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
     t = 0.0  # Initial time
 
     while t < 1.0:
+        t_ = t * torch.ones((B,)).to(args.device)
         with torch.no_grad():
             ut = model(xt, t_)
         delta_xt = torch.zeros((B,D,S)).to(args.device)
@@ -61,7 +68,7 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
 
         t_ = t * torch.ones((B,)).to(args.device)
         with torch.no_grad():
-            ut = model(xt, t_)
+            ut, _ = model(xt, t_)
 
 
 
@@ -99,12 +106,30 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
 
     return xt.detach().cpu().numpy()
 
-
-def compute_loss(model, xt, x1, t, args):
-    (B, D) = x1.shape
-    S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+def compute_loss(model,B,D,S,t,x1,x0,args):
     if args.source == 'mask':
         M = S - 1
+
+    if args.scheduler_type == 'quadratic_noise':
+        x_noise = torch.randint(0, S, (B, D)).to(args.device)
+    else:
+        x_noise = None
+    
+    if args.scheduler_type == 'linear':
+        kappa1 = t
+    elif args.scheduler_type == 'quadratic':
+        kappa1 = torch.square(t)
+    elif args.scheduler_type == 'quadratic_noise':
+        kappa1 = torch.square(t)
+        kappa2 = t - torch.square(t)
+
+    xt = x1.clone()
+    mask0 = torch.rand((B,D)).to(args.device) < (1 - kappa1[:, None])
+    xt[mask0] = x0[mask0]
+    if args.scheduler_type == 'quadratic_noise':
+        mask_noise = torch.rand((B,D)).to(args.device) < (kappa2/(1 - kappa1))[:, None]
+        mask_noise = mask_noise & mask0
+        xt[mask_noise] = x_noise[mask_noise]
 
     delta_xt = torch.zeros((B,D,S)).to(args.device)
     delta_xt = delta_xt.scatter_(-1, xt[:, :, None], 1.0) 
@@ -116,7 +141,8 @@ def compute_loss(model, xt, x1, t, args):
 
     t_ = t.unsqueeze(-1).unsqueeze(-1).expand((B,D,S))
 
-    ut = model(xt, t) * (args.loss_weight * (1 - t[:, None, None]) + (1 - args.loss_weight))
+    ut, _ = model(xt, t)
+    ut = ut * (args.loss_weight * (1 - t[:, None, None]) + (1 - args.loss_weight))
 
     if args.scheduler_type == 'linear':
         a1 = 1 / (1 - t)
@@ -143,42 +169,45 @@ def compute_loss(model, xt, x1, t, args):
 
     return loss
 
-
 def main_loop(args, verbose=False):
+
+    #set random seeds
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    my_print = args.my_print
+
+    if args.is_toy:
+        main_loop_toy(args, verbose)
+    else:
+        main_loop_real(args, verbose)
+    log_completion(args.methods, args.dataset_name, args)
+
+def main_loop_real(args, verbose=False):
 
     # load data
     train_loader, val_loader, test_loader, args = vamp_utils.load_dataset(args)
     plot = lambda p, x: torchvision.utils.save_image(x.view(x.size(0),
                                                             args.input_size[0], args.input_size[1], args.input_size[2]),
-                                                     p, normalize=True, nrow=int(x.size(0) ** .5))
-
-        # load omniglot
+                                                    p, normalize=True, nrow=int(x.size(0) ** .5))
+    # load omniglot
     if args.source == 'omniglot':
         og_args = copy.deepcopy(args)
         og_args.dataset_name == 'omniglot'
         og_train_loader, og_val_loader, og_test_loader, args = vamp_utils.load_dataset(args)
+        source_train_loader = copy.deepcopy(og_train_loader)
         #can use the same plot function...
-    
+    else:
+        source_train_loader = copy.deepcopy(train_loader)
+
     def preprocess(data, args=args):
         if args.dynamic_binarization:
             return torch.bernoulli(data)
         else:
             return data
-
-
+            
     def get_independent_sample(loader, args=args):
         (x, _) = next(iter(loader))
         return preprocess(x, args)
 
-
-    if args.source == 'omniglot':
-        source_train_loader = copy.deepcopy(og_train_loader)
-    else:
-        source_train_loader = copy.deepcopy(train_loader)
-        
     # make model
     model = ResNetFlow(64, args)
     ema_model = copy.deepcopy(model)
@@ -197,43 +226,20 @@ def main_loop(args, verbose=False):
 
         for it, ((x, _), (x_source, _)) in enumerate(zip(pbar, source_train_loader)):
             
-            x1 = preprocess(x).long().to(args.device)
+            x1 = preprocess(x).long().to(args.device)            
 
             (B, D) = x1.shape
-
             S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
-            if args.source == 'mask':
-                M = S - 1
-                x0 = torch.ones((B,D)).to(args.device).long() * M
-            elif args.source == 'uniform':
-                x0 = torch.randint(0, S, (B, D)).to(args.device)
-            elif args.source == 'data':
-                x0 = preprocess(x_source).long().to(args.device)
-            elif args.source == 'omniglot':
-                x0 = preprocess(x_source, args=og_args).long().to(args.device)     
-       
-
-            if args.scheduler_type == 'quadratic_noise':
-                x_noise = torch.randint(0, S, (B, D)).to(args.device)
-
             t = torch.rand((B,)).to(args.device)
 
-            if args.scheduler_type == 'linear':
-                kappa1 = t
-            elif args.scheduler_type == 'quadratic':
-                kappa1 = torch.square(t)
-            elif args.scheduler_type == 'quadratic_noise':
-                kappa1 = torch.square(t)
-                kappa2 = t - torch.square(t)
+            if args.source == 'data':
+                x0 = preprocess(x_source).long().to(args.device)
+            elif args.source == 'omniglot':
+                x0 = preprocess(x_source, args=og_args).long().to(args.device)
+            else:
+                x0 = get_x0(B,D,S,args)
 
-            xt = x1.clone()
-            mask0 = torch.rand((B,D)).to(args.device) < (1 - kappa1[:, None])
-            xt[mask0] = x0[mask0]
-            if args.scheduler_type == 'quadratic_noise':
-                mask_noise = torch.rand((B,D)).to(args.device) < (kappa2/(1 - kappa1))[:, None]
-                mask_noise = mask_noise & mask0
-                xt[mask_noise] = x_noise[mask_noise]
-            loss = compute_loss(model, xt, x1, t, args)
+            loss = compute_loss(model,B,D,S,t,x1,x0,args)
 
             optimizer.zero_grad()
             loss.backward()
@@ -249,14 +255,11 @@ def main_loop(args, verbose=False):
         if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs):
             eval_start_time = time.time()
 
+            #save models
             torch.save(model.state_dict(), f'{args.ckpt_path}/model_{epoch}.pt')
-
-            log_entry = {'epoch':None,'timestamp':None}
-            
-            log_entry['loss'] = loss.item()
-            # log_entry['acc'] = acc
             torch.save(ema_model.state_dict(), f'{args.ckpt_path}/ema_model_{epoch}.pt')
 
+            #save samples
             if args.source == 'data':
                 xt = get_independent_sample(test_loader).long().to(args.device) 
                 plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
@@ -265,16 +268,15 @@ def main_loop(args, verbose=False):
                 plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
             else:
                 xt = None
-
             samples = gen_samples(model, args, batch_size=args.batch_size, xt=xt)
             plot(f'{args.sample_path}/samples_{epoch}.png', torch.tensor(samples).float())
             ema_samples = gen_samples(ema_model, args, batch_size=100, xt=xt)
             plot(f'{args.sample_path}/ema_samples_{epoch}.png', torch.tensor(ema_samples).float())
-            eval_end_time = time.time()
-            eval_time = eval_end_time - eval_start_time
-            cum_eval_time += eval_time
-            timestamp = time.time() - cum_eval_time - start_time
+
+            #save log
+            log_entry = {'epoch':None,'timestamp':None}
+            log_entry['loss'] = loss.item()
+            timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
 
             log(args, log_entry, epoch, timestamp)
-    log_completion(args.methods, args.dataset_name, args)
 
