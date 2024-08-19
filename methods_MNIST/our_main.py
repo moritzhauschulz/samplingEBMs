@@ -80,7 +80,7 @@ def get_args():
     parser.add_argument('--source', type=str, default='mask', choices=['mask','uniform','data','omniglot'])
     parser.add_argument('--dfs_warmup_iter', type=int, default=0)
     parser.add_argument('--dfs_per_ebm', type=int, default=1)
-    parser.add_argument('--warmup_iters', type=int, default=100) #10000
+    parser.add_argument('--warmup_iters', type=int, default=0) #10000
     parser.add_argument('--dataset_name', type=str, default='static_mnist')
     parser.add_argument('--discrete_dim', type=int, default=28*28)
     parser.add_argument('--vocab_size', type=int, default=2)

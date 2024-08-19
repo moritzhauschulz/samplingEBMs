@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import torch.distributions as dists
 import torchvision
 
-from eb_gfn.network import make_mlp
+from methods.eb_gfn.network import make_mlp
 
 class Lambda(nn.Module):
     def __init__(self, f):

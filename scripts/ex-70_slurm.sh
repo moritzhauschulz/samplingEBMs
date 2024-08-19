@@ -39,18 +39,17 @@ python -u methods_MNIST/our_main.py --alpha 0 --itr_save 100 --methods velo_efm_
 python -u methods_MNIST/our_main.py --alpha 0 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --optional_step 1 --epoch_save 1 --num_epochs 25 > ${output_date}/output2.log 2>&1 &
 python -u methods_MNIST/our_main.py --alpha 0 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --optional_step 1 --optimal_temp 1 --epoch_save 1 --num_epochs 25 > ${output_date}/output3.log 2>&1 &
 
-python -u methods_MNIST/our_main.py --alpha 0.1 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --epoch_save 1 --num_epochs 25 > ${output_date}/output4.log 2>&1 &
-python -u methods_MNIST/our_main.py --alpha 0.1 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --optional_step 1 --epoch_save 1 --num_epochs 25 > ${output_date}/output5.log 2>&1 &
-python -u methods_MNIST/our_main.py --alpha 0.1 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --optional_step 1 --optimal_temp 1 --epoch_save 1 --num_epochs 25 > ${output_date}/output6.log 2>&1 &
+# python -u methods_MNIST/our_main.py --alpha 0.1 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --epoch_save 1 --num_epochs 25 > ${output_date}/output4.log 2>&1 &
+# python -u methods_MNIST/our_main.py --alpha 0.1 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --optional_step 1 --epoch_save 1 --num_epochs 25 > ${output_date}/output5.log 2>&1 &
+# python -u methods_MNIST/our_main.py --alpha 0.1 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --optional_step 1 --optimal_temp 1 --epoch_save 1 --num_epochs 25 > ${output_date}/output6.log 2>&1 &
 
 python -u methods_MNIST/our_main.py --recycle_dfs_sample 0 --alpha 0 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --epoch_save 1 --num_epochs 25 > ${output_date}/output7.log 2>&1 &
 python -u methods_MNIST/our_main.py --recycle_dfs_sample 0 --alpha 0 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --optional_step 1 --epoch_save 1 --num_epochs 25 > ${output_date}/output8.log 2>&1 &
 python -u methods_MNIST/our_main.py --recycle_dfs_sample 0 --alpha 0 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --optional_step 1 --optimal_temp 1 --epoch_save 1 --num_epochs 25 > ${output_date}/output9.log 2>&1 &
 
-python -u methods_MNIST/our_main.py --recycle_dfs_sample 0 --alpha 0.1 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --epoch_save 1 --num_epochs 25 > ${output_date}/output10.log 2>&1 &
-python -u methods_MNIST/our_main.py --recycle_dfs_sample 0 --alpha 0.1 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --optional_step 1 --epoch_save 1 --num_epochs 25 > ${output_date}/output11.log 2>&1 &
-python -u methods_MNIST/our_main.py --recycle_dfs_sample 0 --alpha 0.1 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --optional_step 1 --optimal_temp 1 --epoch_save 1 --num_epochs 25 > ${output_date}/output12.log 2>&1 &
-
+# python -u methods_MNIST/our_main.py --recycle_dfs_sample 0 --alpha 0.1 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --epoch_save 1 --num_epochs 25 > ${output_date}/output10.log 2>&1 &
+# python -u methods_MNIST/our_main.py --recycle_dfs_sample 0 --alpha 0.1 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --optional_step 1 --epoch_save 1 --num_epochs 25 > ${output_date}/output11.log 2>&1 &
+# python -u methods_MNIST/our_main.py --recycle_dfs_sample 0 --alpha 0.1 --itr_save 100 --methods velo_efm_ebm_bootstrap_2 --scheduler_type linear --source uniform --optional_step 1 --optimal_temp 1 --epoch_save 1 --num_epochs 25 > ${output_date}/output12.log 2>&1 &
 wait
 
 

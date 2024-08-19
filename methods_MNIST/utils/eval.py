@@ -14,6 +14,11 @@ import sys
 from filelock import FileLock, Timeout
 import re
 
+from utils.utils import get_batch_data
+from utils.utils import print_cuda_memory_stats
+from utils.utils import bin2float
+from utils.utils import ourbase2float
+
 from utils.sampler import GibbsSampler 
 
 def plot_weight_histogram(weights_tensor, output_dir=None, bins=1000, title='Histogram of Weights'):

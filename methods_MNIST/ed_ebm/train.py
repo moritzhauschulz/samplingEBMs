@@ -7,6 +7,8 @@ from tqdm import tqdm
 import torch.distributions as dists
 
 from utils import utils
+from utils.eval import ebm_evaluation, log_completion, log
+from utils.toy_data_lib import get_db
 from utils import eval
 from ed_ebm.model import MLPScore, EBM
 from ed_ebm.ed_categorical import ed_categorical
@@ -39,9 +41,10 @@ def energy_discrepancy_bernoulli(energy_net, samples, epsilon=0.1, m_particles=3
     loss = val.logsumexp(dim=-1).mean()
     return loss
 
-def main_loop(db, args, verbose=False):
+def main_loop(args, verbose=False):
     start_time = time.time()
 
+    db = get_db(args)
     #assert args.vocab_size == 2, 'Only support binary data'
 
     samples = get_batch_data(db, args, batch_size=50000)
@@ -83,6 +86,8 @@ def main_loop(db, args, verbose=False):
                 utils.plot_sampler(model, f'{args.sample_path}/samples_{epoch}.png', args)
 
         if (epoch % args.eval_every == 0) or (epoch == args.num_epochs):
+            torch.save(model.state_dict(), f'{args.ckpt_path}/model_{epoch}.pt')
+
 
             if epoch < args.num_epochs:
                 ais_samples = args.intermediate_ais_samples

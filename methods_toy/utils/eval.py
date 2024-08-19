@@ -369,21 +369,6 @@ def rbf_kernel(x, y, sigma):
 
 def exp_hamming_mmd(x, y, args, bandwidth=None, log_path='toy_data_hamming_dist_stats.csv'):
   if bandwidth == None:
-  #   df = pd.read_csv(log_path)
-
-  #   # Filter the DataFrame based on the criteria
-  #   filtered_df = df[(df['data_name'] == args.data_name) & 
-  #                    (df['vocab_size'] == args.vocab_size) & 
-  #                    (df['discrete_dim'] == args.discrete_dim)]
-    
-  #   assert not filtered_df.shape[0] > 1, f"Warning: There are {filtered_df.shape[0]} duplicates for data_name={data_name}, vocab_size={vocab_size}, discrete_dim={discrete_dim}; resolve this and try again..."
-    
-  #   assert filtered_df.shape[0] > 0, f"Warning: There are no median hamming distances available for data_name={data_name}, vocab_size={vocab_size}, discrete_dim={discrete_dim}; resolve this and try again..."
-
-  #   # Get the median value
-  #   median = filtered_df['median'].values[0]
-  #   bandwidth = 1 / median
-  #   print(f'Imputed bandwidth {bandwidth} as reciprocal of the median {median} of the given dataset')
     bandwidth = torch.tensor(0.1)
   else:
     bandwidth = torch.tensor(bandwidth)
@@ -411,18 +396,6 @@ def exp_hamming_mmd(x, y, args, bandwidth=None, log_path='toy_data_hamming_dist_
 
 def rbf_mmd(x, y, args, sigma=None, log_path='toy_data_euclidean_dist_stats.csv'):
   if sigma == None:
-    # df = pd.read_csv(log_path)
-
-    # # Filter the DataFrame based on the criteria
-    # filtered_df = df[(df['data_name'] == args.data_name)]    
-    # assert not filtered_df.shape[0] > 1, f"Warning: There are {filtered_df.shape[0]} duplicates for data_name={data_name}; resolve this and try again..."
-    
-    # assert filtered_df.shape[0] > 0, f"Warning: There are no median hamming distances available for data_name={data_name}; resolve this and try again..."
-
-    # # Get the median value
-    # median = filtered_df['median'].values[0]
-    # sigma = median
-    # print(f'Imputed sigma {sigma} as median of the given dataset')
     sigma= torch.tensor(0.1)
   else:
     sigma = torch.tensor(sigma)

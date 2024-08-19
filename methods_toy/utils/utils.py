@@ -6,7 +6,6 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from sympy.combinatorics.graycode import GrayCode
 import json
-
 from utils import toy_data_lib
 from utils.sampler import GibbsSampler
 

@@ -9,99 +9,89 @@ import datetime
 from utils import utils
 from utils.eval import log_args
 from utils.eval import compute_mmd_base_stats
-from runidb.train import main_loop as runidb_main_loop
-from punidb.train import main_loop as punidb_main_loop
+from methods.eb_gfn.train import main_loop as eb_gfn_main_loop
+from methods.gfn.train import main_loop as gfn_main_loop
 
-from ed_ebm.train import main_loop as ed_ebm_main_loop
-from ebm_runidb.train import main_loop as ebm_runidb_main_loop
-from cd_ebm.train import main_loop as cd_ebm_main_loop
-from cd_runi_inter.train import main_loop as cd_runi_inter_main_loop
-from dataq_dfs.train import main_loop as dataq_dfs_main_loop
-from dataq_dfs_ebm.train import main_loop as dataq_dfs_ebm_main_loop
-from uniform_ebm.train import main_loop as uniform_ebm_main_loop
-from mask_dfs.train import main_loop as mask_dfs_main_loop
-from mask_dfs_2.train import main_loop as mask_dfs_2_main_loop
-from mask_dfs_3.train import main_loop as mask_dfs_3_main_loop
-from mask_dfs_4.train import main_loop as mask_dfs_4_main_loop
-from mask_dfs_5.train import main_loop as mask_dfs_5_main_loop
-from mask_dfs_ce.train import main_loop as mask_dfs_ce_main_loop
-from mask_dfs_ce_forced.train import main_loop as mask_dfs_ce_forced_main_loop
-from mask_dfs_ce_2.train import main_loop as mask_dfs_ce_2_main_loop
-from velo_mask_dfs.train import main_loop as velo_mask_dfs_main_loop
-from velo_mask_dfs_ce.train import main_loop as velo_mask_dfs_ce_main_loop
-from velo_mask_dfs_2.train import main_loop as velo_mask_dfs_2_main_loop
-from velo_mask_dfs_ce_2.train import main_loop as velo_mask_dfs_ce_2_main_loop
-from velo_mask_dfs_ce_3.train import main_loop as velo_mask_dfs_ce_3_main_loop
-from velo_mask_dfs_ce_4.train import main_loop as velo_mask_dfs_ce_4_main_loop
 
+def convert_namespace_to_dict(args):
+    args_dict = vars(args).copy()  # Convert Namespace to dictionary
+    # Handle non-serializable objects
+    for key, value in args_dict.items():
+        if isinstance(value, torch.device):
+            args_dict[key] = str(value)
+    args_dict.pop('bm', None)
+    args_dict.pop('inv_bm', None)
+    return args_dict
 
 def get_args():
     parser = argparse.ArgumentParser(description='Pipeline')
-
-    parser.add_argument('--methods', type=str, default='punidb', 
+    
+    parser.add_argument('--methods', type=str, default='eb_gfn', 
         choices=[
-            'punidb', 'runidb',
-            'ed_ebm', 'ebm_runidb',
-            'cd_ebm', 'cd_runi_inter',
-            'dataq_dfs', 'dataq_dfs_ebm',
-            'uniform_ebm', 'mask_dfs',
-            'mask_dfs_2', 'mask_dfs_3',
-            'mask_dfs_4', 'mask_dfs_5',
-            'mask_dfs_ce', 'mask_dfs_ce_2',  
-            'mask_dfs_ce_forced', 'velo_mask_dfs',
-            'velo_mask_dfs_2',
-            'velo_mask_dfs_ce',
-            'velo_mask_dfs_ce_2',
-            'velo_mask_dfs_ce_3',
-            'velo_mask_dfs_ce_4'
+            'eb_gfn',
+            'gfn'
         ],
     )
 
-    parser.add_argument('--data_name', type=str, default='moons')
-    parser.add_argument('--discrete_dim', type=int, default=16)
-    parser.add_argument('--gibbs_num_rounds', type=int, default=100)
-    parser.add_argument('--vocab_size', type=int, default=5)
-    parser.add_argument('--cd_alpha', type=float, default=0.1)
-    parser.add_argument('--delta_t', type=float, default=0.01)
-    parser.add_argument('--mps', action='store_true', help='Try using apple silicon chip (if no gpu available)')
-    parser.add_argument('--noise', type=int, default=1)
-    parser.add_argument('--ebm_lr', type=float, default=1e-3)
-    parser.add_argument('--dfs_lr', type=float, default=1e-3)
-    parser.add_argument('--impute_self_connections', type=int, default=1, choices=[0,1])
-    parser.add_argument('--loss_weight', type=int, default=1, choices=[0,1])
-
-    parser.add_argument("--gfn_type", type=str)
-    parser.add_argument("--gfn_bn", "--gbn", type=int, default=0, choices=[0, 1])
-
+    #gpu
     parser.add_argument('--gpu', type=int, default=0, help='-1: cpu; 0 - ?: specific gpu index')
-    parser.add_argument('--batch_size', default=128, type=int, help='batch size')
+    parser.add_argument('--mps', action='store_true', help='Try using apple silicon chip (if no gpu available)')
 
-    parser.add_argument('--num_epochs', default=1000, type=int, help='num epochs')
-    parser.add_argument('--surrogate_iter_per_epoch', default=1, type=int, help='surrogate sampler: num iterations per epoch')
-    parser.add_argument('--ebm_iter_per_epoch', default=1, type=int, help='ebm: num iterations per epoch')
+
+    #data
+    parser.add_argument('--data_name', type=str, default='moons')  # 2spirals 8gaussians pinwheel circles moons swissroll checkerboard
+    parser.add_argument('--discrete_dim', type=int, default=32)
+    parser.add_argument('--vocab_size', type=int, default=2)
+
+    # training
+    parser.add_argument('--n_iters', "--ni", type=int, default=100000)
+    parser.add_argument('--batch_size', "--bs", type=int, default=128)
+    parser.add_argument('--print_every', "--pe", type=int, default=100)
     parser.add_argument('--eval_every', type=int, default=5000)
     parser.add_argument('--plot_every', type=int, default=2500)
-    parser.add_argument('--experiment_name', default="", type=str, help='unique experiment name for meta data')
-    parser.add_argument('--verbose', default=False, type=bool, help='evaluate final nll and mmd')
+    parser.add_argument('--lr', type=float, default=.0001)
+    parser.add_argument("--gfn_iter_per_epoch", type=int, default=1, help="GFN training frequency")
+    parser.add_argument("--ebm_iter_per_epoch", type=int, default=1, help="EBM training frequency")
+
+    # for GFN
+    parser.add_argument("--type", type=str)
+    parser.add_argument("--hid", type=int, default=512)
+    parser.add_argument("--hid_layers", "--hl", type=int, default=3)
+    parser.add_argument("--leaky", type=int, default=1, choices=[0, 1])
+    parser.add_argument("--gfn_bn", "--gbn", type=int, default=0, choices=[0, 1])
+    parser.add_argument("--init_zero", "--iz", type=int, default=0, choices=[0, 1], )
+    parser.add_argument("--gmodel", "--gm", type=str,default="mlp")
+    parser.add_argument("--train_steps", "--ts", type=int, default=1)
+    parser.add_argument("--l1loss", "--l1l", type=int, default=0, choices=[0, 1], help="use soft l1 loss instead of l2")
 
     parser.add_argument("--with_mh", "--wm", type=int, default=0, choices=[0, 1])
     parser.add_argument("--rand_k", "--rk", type=int, default=0, choices=[0, 1])
     parser.add_argument("--lin_k", "--lk", type=int, default=0, choices=[0, 1])
     parser.add_argument("--warmup_k", "--wk", type=lambda x: int(float(x)), default=0, help="need to use w/ lin_k")
     parser.add_argument("--K", type=int, default=-1, help="for gfn back forth negative sample generation")
-    parser.add_argument("--eta", type=int, default=1, help="eta to determine level of stochasticity in CTMC")
+
+    parser.add_argument("--rand_coef", "--rc", type=float, default=0, help="for tb")
+    parser.add_argument("--back_ratio", "--br", type=float, default=0.)
+    parser.add_argument("--clip", type=float, default=-1., help="for gfn's linf gradient clipping")
+    parser.add_argument("--temp", type=float, default=1)
+    parser.add_argument("--opt", type=str, default="adam", choices=["adam", "sgd"])
+    parser.add_argument("--glr", type=float, default=1e-3)
+    parser.add_argument("--zlr", type=float, default=1)
+    parser.add_argument("--momentum", "--mom", type=float, default=0.0)
+    parser.add_argument("--gfn_weight_decay", "--gwd", type=float, default=0.0)
+    parser.add_argument('--verbose', default=False, type=bool, help='verbose')
 
     parser.add_argument("--final_ais_samples", type=int, default=1000000)
     parser.add_argument("--intermediate_ais_samples", type=int, default=10000)
     parser.add_argument("--final_ais_num_steps", type=int, default=1000)
     parser.add_argument("--intermediate_ais_num_steps", type=int, default=100)
-    parser.add_argument("--mixture", type=float, default=1)
+    parser.add_argument('--gibbs_num_rounds', type=int, default=100)
     parser.add_argument('--pretrained_ebm', type=str, default='imaginary file')
     parser.add_argument('--compute_mmd_base_stats', default=False, type=bool, help='compute mmd variance and mean as a benchmark')
 
-    parser.add_argument("--r_mult", type=int, default=1, choices=[0, 1])
-    parser.add_argument('--eta_list', nargs='+', type=int, help='A list of integers for etas applied at inference (if applicable).', default=[0,1,2])
-    
+
+    args = parser.parse_args()
+
     args = parser.parse_args()
 
     gpu = args.gpu
@@ -128,8 +118,10 @@ def get_args():
             args.device = torch.device('cpu')
             print('use cpu')
 
+    device = args.device
+
     #set paths
-    args.save_dir = f'./methods_toy/{args.methods}/experiments/{args.data_name}'
+    args.save_dir = f'./methods/{args.methods}/experiments/{args.data_name}'
     os.makedirs(args.save_dir, exist_ok=True)
 
     # experiment_idx_path = f'{args.save_dir}/experiment_idx.json'
@@ -142,23 +134,22 @@ def get_args():
     #         experiment_idx = {}
     # else:
     #     experiment_idx = {}
-
+    
     # args.idx = 0
     # while True:
     #     if str(args.idx) in experiment_idx.keys():
     #         args.idx += 1
     #     else:
     #         break
-
     args.completed = False
     args.mmd_mean = None
     args.mmd_var = None
-    args.vocab_size_with_mask = args.vocab_size + 1
 
     start_time = datetime.datetime.now()
     args.start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
 
     args.index_path = f'{args.save_dir}/experiment_idx.json'
+
 
     # Save the updated experiment index to the file
     # experiment_idx[args.idx] = convert_namespace_to_dict(args)
@@ -167,18 +158,20 @@ def get_args():
 
     # print(f"Experiment meta data saved to {args.save_dir}experiment_idx.json")
 
+    # print("Device:" + str(device))
+    # print("Args:" + str(args))
+
     return args
 
 def plot_binary_data_samples(db, args):
-    data = utils.float2bin(db.gen_batch(1000), args.bm, args.discrete_dim, args.int_scale)
+    data = utils.float2bin(db.gen_batch(2500), args.bm, args.discrete_dim, args.int_scale)
     float_data = utils.bin2float(data.astype(np.int32), args.inv_bm, args.discrete_dim, args.int_scale)
-    utils.plot_samples(float_data, f'{args.sample_path}/source_data_sample.png', im_size=4.1)
+    utils.plot_samples(float_data, f'{args.sample_path}/source_data_sample.pdf', im_size=4.1)
 
 def plot_categorical_data_samples(db, args):
-    data = utils.ourfloat2base(db.gen_batch(1000), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
+    data = utils.ourfloat2base(db.gen_batch(2500), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
     float_data = utils.ourbase2float(data.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
-    utils.plot_samples(float_data, f'{args.sample_path}/source_data_sample.png', im_size=4.1)
-
+    utils.plot_samples(float_data, f'{args.sample_path}/source_data_sample.pdf', im_size=4.1)
 
 if __name__ == '__main__':
     args = get_args()
@@ -193,7 +186,7 @@ if __name__ == '__main__':
 
     if args.compute_mmd_base_stats:
         N = 25
-        args.hamming_mmd_mean, args.hamming_mmd_var, args.hamming_bandwidth_base_stats, args.euclidean_mmd_mean, args.euclidean_mmd_var, args.euclidean_bandwidth_base_stats = compute_mmd_base_stats(args, N, db)
+        args.mmd_mean, args.mmd_var, args.bandwidth_base_stats = compute_mmd_base_stats(args, N, db)
 
     log_args(args.methods, args.data_name, args)
 
@@ -219,4 +212,4 @@ if __name__ == '__main__':
 
     main_fn = eval(f'{args.methods}_main_loop')
 
-    main_fn(db, args, verbose=args.verbose)
+    main_fn(db, args)
