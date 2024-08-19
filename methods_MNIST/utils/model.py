@@ -178,3 +178,22 @@ class MLPModel(nn.Module):
         else:
             S_noise_out = None
         return S_out, S_noise_out    # (B, D, S)
+
+class real_EBM(nn.Module):
+    def __init__(self, net, mean=None):
+        super().__init__()
+        self.net = net
+        if mean is None:
+            self.mean = None
+        else:
+            self.mean = nn.Parameter(mean, requires_grad=False)
+
+    def forward(self, x):
+        if self.mean is None:
+            bd = 0.
+        else:
+            base_dist = torch.distributions.Bernoulli(probs=self.mean)
+            bd = base_dist.log_prob(x).sum(-1)
+
+        logp = self.net(x).squeeze()
+        return logp + bd

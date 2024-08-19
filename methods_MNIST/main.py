@@ -19,7 +19,7 @@ from runidb.train import main_loop as runidb_main_loop
 from punidb.train import main_loop as punidb_main_loop
 from velo_dfm.train import main_loop as velo_dfm_main_loop
 from velo_dfs.train import main_loop as velo_dfs_main_loop
-from velo_efm.train import main_loop as velo_efm_main_loop
+from velo_edfm.train import main_loop as velo_edfm_main_loop
 from velo_edfs.train import main_loop as velo_edfs_main_loop
 from velo_efm_ebm.train import main_loop as velo_efm_ebm_main_loop
 from velo_efm_ebm_bootstrap.train import main_loop as velo_efm_ebm_bootstrap_main_loop
@@ -32,7 +32,7 @@ def get_args():
         choices=[
             'eb_gfn', 'gfn', 'ed_ebm',
             'punidb', 'runidb','velo_dfm',
-            'velo_dfs', 'velo_efm', 
+            'velo_dfs', 'velo_edfm', 
             'velo_edfs', 'velo_efm_ebm', 
             'velo_efm_ebm_bootstrap', 'velo_efm_ebm_bootstrap_2',
         ],
@@ -71,12 +71,6 @@ def get_args():
     parser.add_argument('--lr', type=float, default=.0001)
     parser.add_argument('--scheduler_type', type=str, default='quadratic', choices=['quadratic', 'quadratic_noise', 'linear'])
     parser.add_argument('--store_dfs_ema', type=int, default=0, choices=[0,1])
-    parser.add_argument('--start_temp', type=float, default=1.0)
-    parser.add_argument('--temp_decay', type=float, default=1)
-    parser.add_argument('--optimal_temp', type=int, default=0, choices=[0,1])
-    parser.add_argument('--optimal_temp_use_median', type=int, default=1, choices=[0,1])
-    parser.add_argument('--optimal_temp_ema', type=float, default=0)
-    parser.add_argument('--optimal_temp_diff', type=float, default=0.5)
     parser.add_argument('--dfm_step', type=int, default=0, choices=[0,1])
     parser.add_argument('--mixer_step', type=int, default=0, choices=[0,1])
     parser.add_argument('--mixer_type', type=str, default='uniform', choices=['uniform','data_mean'])
@@ -96,6 +90,17 @@ def get_args():
     parser.add_argument('--init_sampling_steps', type=int, default=100)
     parser.add_argument('--base_dist', type=str, default='data_mean', choices=['uniform', 'data_mean', 'zero']) #note that 'uniform' is to be avoided as it just blows up the energy...
     parser.add_argument('--relu', type=int, default=0, choices=[0,1])
+
+    #edfm/dfs
+    parser.add_argument('--start_temp', type=float, default=1.0)
+    parser.add_argument('--temp_decay', type=float, default=1)
+    parser.add_argument('--optimal_temp', type=int, default=0, choices=[0,1])
+    parser.add_argument('--optimal_temp_use_median', type=int, default=1, choices=[0,1])
+    parser.add_argument('--optimal_temp_ema', type=float, default=0)
+    parser.add_argument('--optimal_temp_diff', type=float, default=0.5)
+    parser.add_argument('--q', type=str, default='data_mean', choices=['data_mean','random'])
+
+
 
     #gfn related
     parser.add_argument('--print_every', "--pe", type=int, default=100)

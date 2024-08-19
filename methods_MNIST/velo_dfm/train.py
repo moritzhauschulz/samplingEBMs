@@ -19,8 +19,8 @@ from utils.eval import exp_hamming_mmd
 from utils.eval import rbf_mmd
 from utils.toy_data_lib import get_db
 
-
 from utils.model import ResNetFlow
+
 from utils.model import MLPModel
 
 def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
@@ -252,7 +252,7 @@ def main_loop_real(args, verbose=False):
                 plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
             else:
                 xt = None
-            samples = gen_samples(model, args, batch_size=args.batch_size, xt=xt)
+            samples = gen_samples(model, args, batch_size=100, xt=xt)
             plot(f'{args.sample_path}/samples_{epoch}.png', torch.tensor(samples).float())
             ema_samples = gen_samples(ema_model, args, batch_size=100, xt=xt)
             plot(f'{args.sample_path}/ema_samples_{epoch}.png', torch.tensor(ema_samples).float())
