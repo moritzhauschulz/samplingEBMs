@@ -1,5 +1,6 @@
 import torch
 import os
+import sys
 
 import torch.nn as nn
 import torchvision
@@ -605,3 +606,28 @@ def plot(path, samples, args):
         float_samples = utils.ourbase2float(samples.astype(np.int32), args.discrete_dim, args.f_scale, args.int_scale, args.vocab_size)
     utils.plot_samples(float_samples, path, im_size=4.1, im_fmt='png')
 
+def get_optimal_temp(log_p_prob, log_q_prob, args, alg=1):
+    if alg==1:
+        #here, we assume q is a normalized distribution
+        log_weights = log_p_prob.detach() - log_q_prob.detach()
+        max_index = torch.argmax(log_weights)
+        if args.optimal_temp_use_median:
+            _, sorted_indices = torch.sort(log_weights)
+            median_index = sorted_indices[len(log_weights) // 2]
+            temp_t = 1/(torch.log(torch.tensor(args.optimal_temp_diff)) + log_q_prob[median_index] - log_q_prob[max_index])  * (log_p_prob[median_index] - log_p_prob[max_index])
+        else:
+            weights = log_weights.exp()
+            mean_value = torch.mean(weights.float())
+            diff = torch.abs(weights.float() - mean_value)
+            mean_index = torch.argmin(diff) #lower complexity then median
+            temp_t = 1/(torch.log(torch.tensor(args.optimal_temp_diff)) + log_q_prob[mean_index] - log_q_prob[max_index])  * (log_p_prob[mean_index] - log_p_prob[max_index])
+
+        if temp_t < 1e-10:
+            print(f'\n Reset temp_t to 1, which was at {temp_t}... \n', flush=True)
+            temp_t = torch.tensor(1)
+
+        temp = (args.optimal_temp_ema * temp + (1 - args.optimal_temp_ema) * temp_t).cpu().detach().item()
+    else:
+        print('Other types of optimal t not currently implemented...')
+        sys.exit(0)
+    return temp

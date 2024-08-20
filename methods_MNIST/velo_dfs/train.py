@@ -109,7 +109,7 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
 
     return xt.detach().cpu().numpy()
 
-def compute_loss(model,B,D,S,t,x1,x0,args):
+def compute_loss(model,B,D,S,t,x1,x0,args, weights=None):
     if args.source == 'mask':
         M = S - 1
 
@@ -168,9 +168,13 @@ def compute_loss(model,B,D,S,t,x1,x0,args):
     loss = (ut - ut_target).square()
     if args.impute_self_connections:
         loss.scatter_(-1, xt[:, :, None], 0.0)
-    loss = loss.sum(dim=(1,2)).mean(dim=0)
+    loss = loss.sum(dim=(1,2))
 
-    return loss
+    if not weights is None:
+        loss = weights * loss
+
+
+    return loss.mean(dim=0)
 
 def main_loop(args, verbose=False):
 
@@ -194,7 +198,7 @@ def main_loop_real(args, verbose=False):
     # load omniglot
     if args.source == 'omniglot':
         og_args = copy.deepcopy(args)
-        og_args.dataset_name == 'omniglot'
+        og_args.dataset_name = 'omniglot'
         og_train_loader, og_val_loader, og_test_loader, og_args = vamp_utils.load_dataset(og_args)
         source_train_loader = copy.deepcopy(og_train_loader)
         #can use the same plot function...
@@ -228,6 +232,14 @@ def main_loop_real(args, verbose=False):
         pbar = tqdm(train_loader) if verbose else train_loader
 
         for it, ((x, _), (x_source, _)) in enumerate(zip(pbar, source_train_loader)):
+
+            size_x = x.shape[0]
+            size_x_source = x_source.shape[0]
+
+            if size_x != size_x_source:
+                min_size = min(size_x, size_x_source)
+                x = x[:min_size]
+                x_source = x_source[:min_size]
             
             x1 = preprocess(x).long().to(args.device)            
 

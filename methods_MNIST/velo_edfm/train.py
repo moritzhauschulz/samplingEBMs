@@ -14,6 +14,7 @@ from utils.utils import get_batch_data
 from utils.utils import plot as toy_plot
 from utils.utils import get_x0
 from utils.eval import plot_weight_histogram
+from utils.utils import get_optimal_temp
 
 from utils.sampler import GibbsSampler
 
@@ -28,61 +29,11 @@ from utils.toy_data_lib import get_db
 from utils.model import ResNetFlow, EBM, MLPModel, MLPScore
 
 from velo_dfm.train import gen_samples
+from velo_dfm.train import compute_loss as compute_dfm_loss
 
 def compute_loss(model, B, D, S, log_p_prob, log_q_prob, t, x1, x0, args, temp=1):
-    if args.source == 'mask':
-        M = S - 1
-
-    if args.scheduler_type == 'quadratic_noise':
-        x_noise = torch.randint(0, S, (B, D)).to(args.device)
-    else:
-        x_noise = None
-    
-    if args.scheduler_type == 'linear':
-        kappa1 = t
-    elif args.scheduler_type == 'quadratic':
-        kappa1 = torch.square(t)
-    elif args.scheduler_type == 'quadratic_noise':
-        kappa1 = torch.square(t)
-        kappa2 = t - torch.square(t)
-
-    xt = x1.clone()
-    mask0 = torch.rand((B,D)).to(args.device) < (1 - kappa1[:, None])
-    xt[mask0] = x0[mask0]
-    if args.scheduler_type == 'quadratic_noise':
-        mask_noise = torch.rand((B,D)).to(args.device) < (kappa2/(1 - kappa1))[:, None]
-        mask_noise = mask_noise & mask0
-        xt[mask_noise] = x_noise[mask_noise]
-    
-    x1_logits, noise_logits = model(xt, t)
-
-    loss = F.cross_entropy(x1_logits.transpose(1,2), x1, reduction='none').sum(dim=-1)
-    if args.scheduler_type == 'quadratic_noise':
-        noise_loss = F.cross_entropy(noise_logits.transpose(1,2), x_noise, reduction='none').sum(dim=-1)
-        loss = loss + noise_loss
-    
-
-    log_weights = log_p_prob.detach() - log_q_prob.detach()
-
     if args.optimal_temp:
-        #here, we assume q is a normalized distribution
-        max_index = torch.argmax(log_weights)
-        if args.optimal_temp_use_median:
-            _, sorted_indices = torch.sort(log_weights)
-            median_index = sorted_indices[len(log_weights) // 2]
-            temp_t = 1/(torch.log(torch.tensor(args.optimal_temp_diff)) + log_q_prob[median_index] - log_q_prob[max_index])  * (log_p_prob[median_index] - log_p_prob[max_index])
-        else:
-            weights = log_weights.exp()
-            mean_value = torch.mean(weights.float())
-            diff = torch.abs(weights.float() - mean_value)
-            mean_index = torch.argmin(diff) #lower complexity then median
-            temp_t = 1/(torch.log(torch.tensor(args.optimal_temp_diff)) + log_q_prob[mean_index] - log_q_prob[max_index])  * (log_p_prob[mean_index] - log_p_prob[max_index])
-
-        if temp_t < 1e-10:
-            print(f'\n Reset temp_t to 1, which was at {temp_t}... \n', flush=True)
-            temp_t = torch.tensor(1)
-
-        temp = (args.optimal_temp_ema * temp + (1 - args.optimal_temp_ema) * temp_t).cpu().detach().item()
+        temp = get_optimal_temp(log_p_prob, log_q_prob, args, alg=1)
     else:
         temp = temp * args.temp_decay
 
@@ -96,7 +47,7 @@ def compute_loss(model, B, D, S, log_p_prob, log_q_prob, t, x1, x0, args, temp=1
 
     weights = (log_weights - log_norm).exp()
 
-    loss = weights * loss #the math is wrong?
+    loss, _ = compute_dfm_loss(model, B, D, S, t, x1, x0, args, weights) 
 
     loss = loss.mean(dim=0)
 
@@ -125,7 +76,7 @@ def main_loop_real(args, verbose=False):
     # load omniglot
     if args.source == 'omniglot':
         og_args = copy.deepcopy(args)
-        og_args.dataset_name == 'omniglot'
+        og_args.dataset_name = 'omniglot'
         og_train_loader, og_val_loader, og_test_loader, og_args = vamp_utils.load_dataset(og_args)
         source_train_loader = copy.deepcopy(og_train_loader)
         #can use the same plot function...
@@ -151,7 +102,7 @@ def main_loop_real(args, verbose=False):
         init_mean = (init_batch.mean(0) * (1. - 2 * eps) + eps).to(args.device)
         q_dist = torch.distributions.Bernoulli(probs=init_mean)
     elif args.q == 'random':
-        q_dist = torch.distributions.Bernoulli(probs=0.5 * torch.tensor((args.discrete_dim)).to(args.device))
+        q_dist = torch.distributions.Bernoulli(probs=0.5 * torch.ones((args.discrete_dim,)).to(args.device))
 
     # make dfs model
     dfs_model = ResNetFlow(64, args)
@@ -164,7 +115,7 @@ def main_loop_real(args, verbose=False):
         net = mlp.mlp_ebm(np.prod(args.input_size), nint)
     elif args.ebm_model.startswith("resnet-"):
         nint = int(args.ebm_model.split('-')[1])
-        net = mlp.ResNetEBM(64)
+        net = mlp.ResNetEBM(nint)
     elif args.ebm_model.startswith("cnn-"):
         nint = int(args.ebm_model.split('-')[1])
         net = mlp.MNISTConvNet(nint)
@@ -273,7 +224,7 @@ def main_loop_toy(args, verbose=False):
         init_mean = torch.from_numpy(np.mean(samples, axis=0) * (1. - 2 * eps) + eps).to(args.device)
         q_dist = torch.distributions.Bernoulli(probs=init_mean)
     elif args.q == 'random':
-        q_dist = torch.distributions.Bernoulli(probs=0.5 * torch.tensor((args.discrete_dim).to(args.device)))
+        q_dist = torch.distributions.Bernoulli(probs=0.5 * torch.ones((args.discrete_dim)).to(args.device))
     else:
         print(f'Type {args.q} of q distribution not supported...')
         sys.exit(0)
