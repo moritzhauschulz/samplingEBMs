@@ -631,3 +631,59 @@ def get_optimal_temp(log_p_prob, log_q_prob, args, alg=1):
         print('Other types of optimal t not currently implemented...')
         sys.exit(0)
     return temp
+
+def get_sampler(args):
+    data_dim = np.prod(args.input_size)
+    if args.input_type == "binary":
+        if args.sampler == "gibbs":
+            sampler = samplers.PerDimGibbsSampler(data_dim, rand=False)
+        elif args.sampler == "rand_gibbs":
+            sampler = samplers.PerDimGibbsSampler(data_dim, rand=True)
+        elif args.sampler.startswith("bg-"):
+            block_size = int(args.sampler.split('-')[1])
+            sampler = block_samplers.BlockGibbsSampler(data_dim, block_size)
+        elif args.sampler.startswith("hb-"):
+            block_size, hamming_dist = [int(v) for v in args.sampler.split('-')[1:]]
+            sampler = block_samplers.HammingBallSampler(data_dim, block_size, hamming_dist)
+        elif args.sampler == "gwg":
+            sampler = samplers.DiffSampler(data_dim, 1,
+                                           fixed_proposal=False, approx=True, multi_hop=False, temp=2.)
+        elif args.sampler.startswith("gwg-"):
+            n_hops = int(args.sampler.split('-')[1])
+            sampler = samplers.MultiDiffSampler(data_dim, 1, approx=True, temp=2., n_samples=n_hops)
+        elif args.sampler == "dmala":
+            sampler = samplers.LangevinSampler(data_dim, 1,
+                                           fixed_proposal=False, approx=True, multi_hop=False, temp=2., step_size=args.step_size, mh=True)
+
+        elif args.sampler == "dula":
+            sampler = samplers.LangevinSampler(data_dim, 1,
+                                           fixed_proposal=False, approx=True, multi_hop=False, temp=2., step_size=args.step_size, mh=False)
+        else:
+            raise ValueError("Invalid sampler...")
+    else:
+        if args.sampler == "gibbs":
+            sampler = samplers.PerDimMetropolisSampler(data_dim, int(args.n_out), rand=False)
+        elif args.sampler == "rand_gibbs":
+            sampler = samplers.PerDimMetropolisSampler(data_dim, int(args.n_out), rand=True)
+        elif args.sampler == "gwg":
+            sampler = samplers.DiffSamplerMultiDim(data_dim, 1, approx=True, temp=2.)
+        else:
+            raise ValueError("invalid sampler")
+    return sampler
+
+def makedirs(dirname):
+    """
+    Make directory only if it's not already there.
+    """
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
+
+def align_batchsize(x, x_source):
+    size_x = x.shape[0]
+    size_x_source = x_source.shape[0]
+
+    if size_x != size_x_source:
+        min_size = min(size_x, size_x_source)
+        x = x[:min_size]
+        x_source = x_source[:min_size]
+    return x, x_source

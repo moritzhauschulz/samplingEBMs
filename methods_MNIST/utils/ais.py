@@ -11,7 +11,7 @@ class AISModel(nn.Module):
         self.init_dist = init_dist
 
     def forward(self, x, beta):
-        logpx = self.model(x).squeeze()
+        logpx = - self.model(x).squeeze() #assuming EBM produces f(x), so logp is -f(x)
         logpi = self.init_dist.log_prob(x).sum(-1)
         return logpx * beta + logpi * (1. - beta)
 

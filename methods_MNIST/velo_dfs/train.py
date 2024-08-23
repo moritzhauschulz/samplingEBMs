@@ -5,6 +5,7 @@ import numpy as np
 import torchvision
 from tqdm import tqdm
 import time
+from itertools import cycle
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 import utils.utils as utils
@@ -17,22 +18,62 @@ from utils.eval import log_completion
 from utils.eval import get_eval_timestamp
 from utils.eval import exp_hamming_mmd
 from utils.eval import rbf_mmd
-from utils.toy_data_lib import get_db
+from utils.eval import sampler_evaluation
 
+from utils.toy_data_lib import get_db
 
 from utils.model import ResNetFlow
 from utils.model import MLPModel
+
+def gen_back_samples(model, args, xt, batch_size=None, t=0.0, print_stats=True):
+    assert args.enable_backward, 'Model has to have backward sampling enabled.'
+    # assert args.source in ['data', 'omniglot'], 'Source has to be data or omniglot.'
+
+    S = args.vocab_size
+    D = args.discrete_dim
+    B = xt.shape[0]
+    t = 1.0  # Initial time
+
+    dt = args.delta_t #adaptive t not yet implemented
+    while t > 0.0:
+        delta_xt = torch.zeros((B,D,S)).to(args.device)
+        delta_xt = delta_xt.scatter_(-1, xt[:, :, None], 1.0) 
+        
+
+        t_ = t * torch.ones((B,)).to(args.device)
+        with torch.no_grad():
+            _, ut_back, _ = model(xt, t_)
+
+
+
+        step_probs = delta_xt - (ut_back * dt)
+
+        if args.impute_self_connections:
+            step_probs = step_probs.clamp(max=1.0)
+            step_probs.scatter_(-1, xt[:, :, None], 0.0)
+            step_probs.scatter_(-1, xt[:, :, None], (1.0 - step_probs.sum(dim=-1, keepdim=True))) 
+
+        t -= dt
+
+        step_probs = step_probs.clamp(min=0) #can I avoid this?
+
+        xt = Categorical(step_probs).sample() #(B,D)
+
+    return xt.detach().cpu().numpy()
+
 
 def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
     model.eval()
     S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
     D = args.discrete_dim
-    # Variables, B, D for batch size and number of dimensions respectively
-    B = batch_size if batch_size is not None else args.batch_size
     if not xt is None:
         B = xt.shape[0]
+    else:
+        B = batch_size if batch_size is not None else args.batch_size
+
     if args.source == 'mask':
         M = S - 1
+        
     # Initialize xt with the mask index value if not provided
     if xt is None:
         if args.source == 'mask':
@@ -44,8 +85,6 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
 
     while t < 1.0:
         t_ = t * torch.ones((B,)).to(args.device)
-        with torch.no_grad():
-            ut = model(xt, t_)
         delta_xt = torch.zeros((B,D,S)).to(args.device)
         delta_xt = delta_xt.scatter_(-1, xt[:, :, None], 1.0) 
         if args.scheduler_type == 'linear':
@@ -68,10 +107,18 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
                 dt = min(args.delta_t, 1 - t)
             else:
                 dt = args.delta_t
+        elif args.scheduler_type == 'cubic':
+                #adaptive dt
+            if t>0 and t < 0.5:
+                dt = min(args.delta_t, (2 * t ** 3 - 3 * t ** 2 + 2 * t)/(6 * t ** 2 - 6 * t + 2))
+            else:
+                dt = min(args.delta_t, (1 - (2 * t ** 3 - 3 * t ** 2 + 2 * t))/(6 * t ** 2 - 6 * t + 2))
+
+
 
         t_ = t * torch.ones((B,)).to(args.device)
         with torch.no_grad():
-            ut, _ = model(xt, t_)
+            ut, _, _ = model(xt, t_)
 
 
 
@@ -110,6 +157,10 @@ def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
     return xt.detach().cpu().numpy()
 
 def compute_loss(model,B,D,S,t,x1,x0,args, weights=None):
+
+    # if args.enable_backward:
+    #     assert args.source in ['data', 'omniglot'], 'If backward sampling enabled, source has to be data or omniglot.'
+
     if args.source == 'mask':
         M = S - 1
 
@@ -124,7 +175,10 @@ def compute_loss(model,B,D,S,t,x1,x0,args, weights=None):
         kappa1 = torch.square(t)
     elif args.scheduler_type == 'quadratic_noise':
         kappa1 = torch.square(t)
-        kappa2 = t - torch.square(t)
+        kappa2 = t - kappa1
+    elif args.scheduler_type == 'cubic':
+        kappa1 = 2 * torch.pow(t, 3) - 3 * torch.pow(t, 2) + 2 * t
+        kappa2 = 1 - kappa1
 
     xt = x1.clone()
     mask0 = torch.rand((B,D)).to(args.device) < (1 - kappa1[:, None])
@@ -140,41 +194,71 @@ def compute_loss(model,B,D,S,t,x1,x0,args, weights=None):
     delta_x1 = torch.zeros((B,D,S)).to(args.device)
     delta_x1 = delta_x1.scatter_(-1, x1[:, :, None], 1.0)
 
+    if args.enable_backward:    
+        delta_x0 = torch.zeros((B,D,S)).to(args.device)
+        delta_x0 = delta_x0.scatter_(-1, x0[:, :, None], 1.0)
+
     w_noise = torch.ones((B,D,S)).to(args.device) * 1/S
 
     t_ = t.unsqueeze(-1).unsqueeze(-1).expand((B,D,S))
 
-    ut, _ = model(xt, t)
-    ut = ut * (args.loss_weight * (1 - t[:, None, None]) + (1 - args.loss_weight))
+    ut, ut_back, _ = model(xt, t)
 
     if args.scheduler_type == 'linear':
         a1 = 1 / (1 - t)
+        if args.enable_backward:
+            a2_back = -1/t
+            b_back = 1/t 
         b = -a1
     elif args.scheduler_type == 'quadratic':
         a1 = (2 * t) / (1 - t ** 2)
         b = -a1
+        if args.enable_backward:
+            a2_back = -2/t
+            b_back = 2/t
     elif args.scheduler_type == 'quadratic_noise':
         a1 = t * (2 - t)/(1 - t)
         a2 = 1 - t
         b = -1 /(1 - t)
-    
+        if args.enable_backward:
+            a2_back = -1 * torch.ones_like(t)
+            a3_back = 1 - (2/t)
+            b_back = 2/t
+
+    elif args.scheduler_type == 'cubic':
+        a1 = (1 - 4 * t)/(2 * t ** 2 - t + 1) + 1/(1 - t)
+        b = (4 * t -1 )/(t * (2 * t - 1) + 1) - 1/(1 - t)
+        if args.enable_backward:
+            a2_back = (3 - 4 * t)/(2 * t ** 2 - 3 * t + 2) - 1/t
+            b_back = (4 * t - 3)/(t * (2 * t - 3) + 2) + 1/t
+
     if args.scheduler_type == 'quadratic_noise':
         ut_target = a1[:, None, None] * delta_x1 + a2[:, None, None] * w_noise + b[:, None, None] * delta_xt #a3 is zero...
+        if args.enable_backward:
+            ut_target_back = a2_back[:, None, None] * w_noise + a3_back[:, None, None] * delta_x0 + b_back[:, None, None] * delta_xt #a1 is zero...
     else:
         ut_target = a1[:, None, None] * delta_x1 + b[:, None, None] * delta_xt
+        if args.enable_backward:
+            ut_target_back = a2_back[:, None, None] * delta_x0 + b_back[:, None, None] * delta_xt #a1 is zero...
 
-    ut_target =  ut_target * (args.loss_weight * (1 - t[:, None, None]) + (1 - args.loss_weight))
 
-    loss = (ut - ut_target).square()
+    ut_diff = (ut - ut_target) * (args.loss_weight * (1 - t[:, None, None]) + (1 - args.loss_weight))
+    if args.enable_backward:
+        ut_target_diff = (ut_back - ut_target_back) * (args.loss_weight * (t[:, None, None]) + (1 - args.loss_weight))
+
+    loss = (ut_diff).square()
+    if args.enable_backward:
+        loss = loss + (ut_target_diff).square()
     if args.impute_self_connections:
         loss.scatter_(-1, xt[:, :, None], 0.0)
     loss = loss.sum(dim=(1,2))
 
     if not weights is None:
         loss = weights * loss
+    
+    acc = None
 
-
-    return loss.mean(dim=0)
+    return loss.mean(dim=0), acc
 
 def main_loop(args, verbose=False):
 
@@ -231,7 +315,7 @@ def main_loop_real(args, verbose=False):
         model.train()
         pbar = tqdm(train_loader) if verbose else train_loader
 
-        for it, ((x, _), (x_source, _)) in enumerate(zip(pbar, source_train_loader)):
+        for it, ((x, _), (x_source, _)) in enumerate(zip(pbar, cycle(source_train_loader))):
 
             size_x = x.shape[0]
             size_x_source = x_source.shape[0]
@@ -283,10 +367,20 @@ def main_loop_real(args, verbose=False):
                 plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
             else:
                 xt = None
-            samples = gen_samples(model, args, batch_size=args.batch_size, xt=xt)
+            samples = gen_samples(model, args, batch_size=100, xt=xt)
             plot(f'{args.sample_path}/samples_{epoch}.png', torch.tensor(samples).float())
             ema_samples = gen_samples(ema_model, args, batch_size=100, xt=xt)
             plot(f'{args.sample_path}/ema_samples_{epoch}.png', torch.tensor(ema_samples).float())
+
+            #backward samples
+            if args.enable_backward:
+                xt = get_independent_sample(test_loader).long().to(args.device) 
+                plot(f'{args.sample_path}/backward_source_{epoch}.png', xt.float())
+
+                samples = gen_back_samples(model, args, xt, batch_size=100)
+                plot(f'{args.sample_path}/backward_samples_{epoch}.png', torch.tensor(samples).float())
+                ema_samples = gen_back_samples(ema_model, args, xt, batch_size=100)
+                plot(f'{args.sample_path}/backward_ema_samples_{epoch}.png', torch.tensor(ema_samples).float())
 
             #save log
             log_entry = {'epoch':None,'timestamp':None}
@@ -296,6 +390,7 @@ def main_loop_real(args, verbose=False):
             log(args, log_entry, epoch, timestamp)
 
 def main_loop_toy(args, verbose=False):
+    assert not args.enable_backward, 'Backwards sampling not implemented for toy data.'
 
     # load data
     db = get_db(args)
@@ -343,7 +438,7 @@ def main_loop_toy(args, verbose=False):
         if verbose:
             pbar.set_description(f'Epoch {epoch} Loss {loss.item()}')
 
-        if (epoch % args.plot_every == 0) or (epoch == args.num_epochs):
+        if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs):
             eval_start_time = time.time()
 
             #save samples
@@ -356,7 +451,14 @@ def main_loop_toy(args, verbose=False):
             plot(f'{args.sample_path}/samples_{epoch}.png', torch.tensor(samples).float())
             ema_samples = gen_samples(ema_model, args, batch_size=2500, xt=xt)
             plot(f'{args.sample_path}/ema_samples_{epoch}.png', torch.tensor(ema_samples).float())
-            _, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
+            
+            #log
+            log_entry = {'epoch':None,'timestamp':None}
+            log_entry['loss'] = loss.item()
+            
+            timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
+            log(args, log_entry, epoch, timestamp)
+
         if (epoch % args.eval_every == 0) or (epoch == args.num_epochs):
             eval_start_time = time.time()
 
@@ -365,29 +467,14 @@ def main_loop_toy(args, verbose=False):
             torch.save(ema_model.state_dict(), f'{args.ckpt_path}/ema_model_{epoch}.pt')
 
             #compute mmds
-            exp_hamming_mmd_list = []
-            rbf_mmd_list = []
-            for _ in range(10):
-                if args.source == 'data':
-                    xt = torch.from_numpy(get_batch_data(db, args, batch_size = 2500)).to(args.device)
-                    plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
-                else:
-                    xt = None
-                x = torch.from_numpy(gen_samples(model, args, batch_size = 4000, xt=xt)).to('cpu')
-                y = get_batch_data(db, args, batch_size=4000)
-                y = torch.from_numpy(np.float32(y)).to('cpu')
-                hamming_mmd, bandwidth = exp_hamming_mmd(x,y,args)
-                euclidean_mmd, sigma = rbf_mmd(x,y,args)
-                exp_hamming_mmd_list.append(hamming_mmd)
-                rbf_mmd_list.append(euclidean_mmd)
-            hamming_mmd = sum(exp_hamming_mmd_list)/10
-            euclidean_mmd = sum(rbf_mmd_list)/10
+            hamming_mmd, bandwidth, euclidean_mmd, sigma = sampler_evaluation(args, db, dfs_model, gen_samples)
 
             #log
             log_entry = {'epoch':None,'timestamp':None}
-            log_entry['sampler_hamming_mmd'], log_entry['bandwidth'] = hamming_mmd.item(), bandwidth.item()
-            log_entry['sampler_euclidean_mmd'], log_entry['sigma'] = euclidean_mmd.item(), sigma.item()
+            log_entry['sampler_hamming_mmd'], log_entry['sampler_bandwidth'] = hamming_mmd, bandwidth
+            log_entry['sampler_euclidean_mmd'], log_entry['sampler_sigma'] = euclidean_mmd, sigma
+
+            #log
             log_entry['loss'] = loss.item()
             timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
             log(args, log_entry, epoch, timestamp)
-

@@ -1,6 +1,8 @@
 #!/bin/bash
 
 #SBATCH --gres=gpu:1
+#SBATCH --mem=40G 
+#SBATCH --cpus-per-task=16
 #SBATCH --mail-type=ALL # required to send email notifications
 #SBATCH --mail-user=meh23@ic.ac.uk # required to send email notifications - please replace <your_username> with your college login name or email address
 #SBATCH --output=/dev/null # Temporarily send output to /dev/null
@@ -47,6 +49,11 @@ python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.000
 python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 
+python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type cubic --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type cubic --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type cubic --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+wait
+
 #2spirals dfs - random q
 python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type linear --source uniform --num_epoch 100000 --eval_every 2500  --epoch_save 2500 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
@@ -59,7 +66,11 @@ python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.000
 python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic_noise --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-wait 
+
+python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type cubic --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type cubic --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type cubic --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+wait
 
 #2spirals dfm - mean q
 python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
@@ -74,6 +85,11 @@ python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 -
 python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 
+python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type cubic --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type cubic --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type cubic --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+wait
+
 #2spirals dfs - mean q
 python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type linear --source uniform --num_epoch 100000 --eval_every 2500  --epoch_save 2500 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
@@ -86,6 +102,86 @@ python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 -
 python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic_noise --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type cubic --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type cubic --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name 2spirals --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type cubic --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+wait 
+
+
+
+
+
+#checkerboard dfm - random q
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type linear --source uniform --num_epoch 100000 --eval_every 5000  --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type linear --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic_noise --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type cubic --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type cubic --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type cubic --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+wait
+
+#checkerboard dfs - random q
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type linear --source uniform --num_epoch 100000 --eval_every 2500  --epoch_save 2500 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type linear --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic_noise --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type cubic --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type cubic --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q data_mean --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type cubic --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+wait
+
+#checkerboard dfm - mean q
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type linear --source uniform --num_epoch 100000 --eval_every 5000  --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type linear --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic_noise --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type cubic --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type cubic --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfm --scheduler_type cubic --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+wait
+
+#checkerboard dfs - mean q
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type linear --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type linear --source uniform --num_epoch 100000 --eval_every 2500  --epoch_save 2500 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type linear --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic_noise --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic_noise --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type quadratic_noise --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type cubic --source mask --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type cubic --source uniform --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods_MNIST/main.py --q random --dataset_name checkerboard --lr 0.0001 --delta_t 0.05 --methods velo_edfs --scheduler_type cubic --source data --num_epoch 100000 --eval_every 5000 --epoch_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 wait 
 
 #circles dfm

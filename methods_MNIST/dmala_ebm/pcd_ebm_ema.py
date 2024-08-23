@@ -44,7 +44,6 @@ def get_sampler(args):
         elif args.sampler == "dmala":
             sampler = samplers.LangevinSampler(data_dim, 1,
                                            fixed_proposal=False, approx=True, multi_hop=False, temp=2., step_size=args.step_size, mh=True)
-
         elif args.sampler == "dula":
             sampler = samplers.LangevinSampler(data_dim, 1,
                                            fixed_proposal=False, approx=True, multi_hop=False, temp=2., step_size=args.step_size, mh=False)
@@ -282,7 +281,7 @@ if __name__ == "__main__":
     # data generation
     parser.add_argument('--n_out', type=int, default=3)     # potts
     # models
-    parser.add_argument('--ebm_model', type=str, default='mlp-256')
+    parser.add_argument('--model', type=str, default='mlp-256')
     parser.add_argument('--base_dist', action='store_true')
     parser.add_argument('--p_control', type=float, default=0.0)
     parser.add_argument('--l2', type=float, default=0.0)

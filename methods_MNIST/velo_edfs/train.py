@@ -7,23 +7,28 @@ import numpy as np
 import torchvision
 from tqdm import tqdm
 import time
+from itertools import cycle
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
+
+import utils.samplers as samplers
 import utils.utils as utils
 from utils.utils import get_batch_data
 from utils.utils import plot as toy_plot
 from utils.utils import get_x0
 from utils.eval import plot_weight_histogram
 from utils.utils import get_optimal_temp
-
 from utils.sampler import GibbsSampler
 
 import utils.vamp_utils as vamp_utils
+
 from utils.eval import log
 from utils.eval import log_completion
 from utils.eval import get_eval_timestamp
 from utils.eval import exp_hamming_mmd
 from utils.eval import rbf_mmd
+from utils.eval import sampler_ebm_evaluation
+from utils.eval import sampler_evaluation
 from utils.toy_data_lib import get_db
 
 from utils.model import ResNetFlow, EBM, MLPModel, MLPScore
@@ -48,7 +53,7 @@ def compute_loss(model, B, D, S, log_p_prob, log_q_prob, t, x1, x0, args, temp=1
 
     weights = (log_weights - log_norm).exp()
 
-    loss = compute_dfs_loss(model, B, D, S, t, x1, x0, args, weights) 
+    loss, _ = compute_dfs_loss(model, B, D, S, t, x1, x0, args, weights) 
 
     loss = loss.mean(dim=0)
 
@@ -148,9 +153,10 @@ def main_loop_real(args, verbose=False):
         
         dfs_model.train()
         ebm_model.eval()
-        pbar = tqdm(source_train_loader) if verbose else source_train_loader
+        pbar = tqdm(range(len(train_loader))) if verbose else range(len(train_loader))
+        # pbar = tqdm(source_train_loader) if verbose else source_train_loader
     
-        for it, (x_source, _) in enumerate(pbar):
+        for it, (x_source, _) in zip(pbar, cycle(source_train_loader)):
             (B, D) = x_source.shape
             x1 = q_dist.sample((B,)).to(args.device).long()
             S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
@@ -214,6 +220,7 @@ def main_loop_real(args, verbose=False):
             log(args, log_entry, epoch, timestamp)
 
 def main_loop_toy(args, verbose=False):
+    assert args.source in ['mask','uniform','data'], 'Omniglot not supported in toy data.'
 
     # load data
     db = get_db(args)
@@ -290,7 +297,7 @@ def main_loop_toy(args, verbose=False):
         if verbose:
             pbar.set_description(f'Epoch {epoch}, Loss {loss.item()}, Temp {temp}')
 
-        if (epoch % args.plot_every == 0) or (epoch == args.num_epochs):
+        if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs):
             eval_start_time = time.time()
 
             #save samples
@@ -316,52 +323,37 @@ def main_loop_toy(args, verbose=False):
             log_entry['loss'] = loss.item()
             log_entry['temp'] = temp
             log_entry['mean_weight'] = weights.mean().item()
-            
-            #compute mmds 1/2
-            exp_hamming_mmd_list = []
-            rbf_mmd_list = []
-            for _ in range(10):
-                if args.source == 'data':
-                    xt = torch.from_numpy(get_batch_data(db, args, batch_size = 4000)).to(args.device)
-                    plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
-                else:
-                    xt = None
-                x = torch.from_numpy(gen_samples(dfs_model, args, batch_size = 4000, xt=xt)).to('cpu')
-                y = get_batch_data(db, args, batch_size=4000)
-                y = torch.from_numpy(np.float32(y)).to('cpu')
-                hamming_mmd, bandwidth = exp_hamming_mmd(x,y,args)
-                euclidean_mmd, sigma = rbf_mmd(x,y,args)
-                exp_hamming_mmd_list.append(hamming_mmd)
-                rbf_mmd_list.append(euclidean_mmd)
-            hamming_mmd = sum(exp_hamming_mmd_list)/10
-            euclidean_mmd = sum(rbf_mmd_list)/10
-
-            #log
-            log_entry['sampler_hamming_mmd'], log_entry['sampler_bandwidth'] = hamming_mmd.item(), bandwidth.item()
-            log_entry['sampler_euclidean_mmd'], log_entry['sampler_sigma'] = euclidean_mmd.item(), sigma.item()
-
-            #compute mmds 2/2
-            exp_hamming_mmd_list = []
-            rbf_mmd_list = []
-            gibbs_sampler = GibbsSampler(2, args.discrete_dim, args.device)
-            for _ in range(10):
-                if args.source == 'data':
-                    xt = torch.from_numpy(get_batch_data(db, args, batch_size = 4000)).to(args.device)
-                    plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
-                else:
-                    xt = None
-                x = torch.from_numpy(gen_samples(dfs_model, args, batch_size = 4000, xt=xt)).to('cpu')
-                y = gibbs_sampler(ebm_model, num_rounds=100, num_samples=4000).to('cpu')
-                hamming_mmd, bandwidth = exp_hamming_mmd(x,y,args)
-                euclidean_mmd, sigma = rbf_mmd(x,y,args)
-                exp_hamming_mmd_list.append(hamming_mmd)
-                rbf_mmd_list.append(euclidean_mmd)
-            hamming_mmd = sum(exp_hamming_mmd_list)/10
-            euclidean_mmd = sum(rbf_mmd_list)/10
-
-            #log
-            log_entry['sampler_ebm_hamming_mmd'], log_entry['sampler_ebm_bandwidth'] = hamming_mmd.item(), bandwidth.item()
-            log_entry['sampler_ebm_euclidean_mmd'], log_entry['sampler_ebm_sigma'] = euclidean_mmd.item(), sigma.item()
 
             timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
             log(args, log_entry, epoch, timestamp)
+
+
+        if args.eval_on:
+            if (epoch % args.eval_every == 0) or (epoch == args.num_epochs):
+
+                eval_start_time = time.time()
+                log_entry = {'epoch':None,'timestamp':None}
+                log_entry['loss'] = loss.item()
+                log_entry['temp'] = temp
+                log_entry['mean_weight'] = weights.mean().item()
+
+                #compute mmds 1/2
+                hamming_mmd, bandwidth, euclidean_mmd, sigma = sampler_evaluation(args, db, dfs_model, gen_samples)
+
+                #log
+                log_entry['sampler_hamming_mmd'], log_entry['sampler_bandwidth'] = hamming_mmd.item(), bandwidth.item()
+                log_entry['sampler_euclidean_mmd'], log_entry['sampler_sigma'] = euclidean_mmd.item(), sigma.item()
+
+                #log
+                log_entry['sampler_hamming_mmd'], log_entry['sampler_bandwidth'] = hamming_mmd.item(), bandwidth.item()
+                log_entry['sampler_euclidean_mmd'], log_entry['sampler_sigma'] = euclidean_mmd.item(), sigma.item()
+
+                #compute mmds 2/2
+                hamming_mmd, bandwidth, euclidean_mmd, sigma = sampler_ebm_evaluation(args, db, dfs_model, gen_samples, ebm_model)
+
+                #log
+                log_entry['sampler_ebm_hamming_mmd'], log_entry['sampler_ebm_bandwidth'] = hamming_mmd.item(), bandwidth.item()
+                log_entry['sampler_ebm_euclidean_mmd'], log_entry['sampler_ebm_sigma'] = euclidean_mmd.item(), sigma.item()
+
+                timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
+                log(args, log_entry, epoch, timestamp, log_path=f'{args.save_dir}/{args.dataset_name}_{args.exp_n}/eval_log.csv')

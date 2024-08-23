@@ -82,10 +82,13 @@ class ResNetFlow(nn.Module):
         super().__init__()
         D = args.discrete_dim
         S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
-        self.model_has_noise = args.model_has_noise 
-
+        self.model_has_noise = args.model_has_noise
+        self.enable_backward = args.enable_backward
         if self.model_has_noise:
             S_noise = S
+        if self.enable_backward:
+            S_source = S
+        self.relu = args.relu
 
         self.x_proj_linear = nn.Sequential(
             nn.Linear(28*28, 1024),
@@ -108,6 +111,10 @@ class ResNetFlow(nn.Module):
         self.output_linear = nn.Linear(n_channels, D*S)
         if self.model_has_noise:
             self.output_linear_noise = nn.Linear(n_channels, D*S_noise)
+        if self.enable_backward:
+            self.output_linear_backward = nn.Linear(n_channels, D * S_source)
+            
+        
 
 
     def forward(self, xt, t):
@@ -127,7 +134,14 @@ class ResNetFlow(nn.Module):
             S_noise_out = self.output_linear_noise(h).reshape(B, D, -1)
         else:
             S_noise_out = None
-        return S_out, S_noise_out    # (B, D, S)
+        if self.enable_backward:
+            S_back_out = self.output_linear_backward(h).reshape(B, D, -1)
+            if self.relu:
+                S_back_out = F.relu(S_back_out)
+        else:
+            S_back_out = None
+        return S_out, S_back_out, S_noise_out    # (B, D, S)
+
 
 class MLPModel(nn.Module):
     def __init__(self, args):
@@ -136,8 +150,11 @@ class MLPModel(nn.Module):
         D = args.discrete_dim
         S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
         self.model_has_noise = args.model_has_noise
+        self.enable_backward = args.enable_backward
         if self.model_has_noise:
             S_noise = S
+        if self.enable_backward:
+            S_source = S
         self.relu = args.relu
         
         self.embedding = nn.Embedding(args.vocab_size_with_mask, 16)
@@ -156,6 +173,10 @@ class MLPModel(nn.Module):
         if self.model_has_noise:
             self.output_linear_noise = nn.Sequential(
                 nn.Linear(1024, D * S_noise),
+            )
+        if self.enable_backward:
+            self.output_linear_backward = nn.Sequential(
+                nn.Linear(1024, D * S_source),
             )
     
     def forward(self, x, t):
@@ -177,7 +198,14 @@ class MLPModel(nn.Module):
                 S_noise_out = F.relu(S_noise_out)
         else:
             S_noise_out = None
-        return S_out, S_noise_out    # (B, D, S)
+        if self.enable_backward:
+            S_back_out = self.output_linear_backward(h).reshape(B, D, -1)
+            if self.relu:
+                S_back_out = F.relu(S_back_out)
+        else:
+            S_back_out = None
+        return S_out, S_back_out, S_noise_out    # (B, D, S)
+
 
 class EBM(nn.Module):
     def __init__(self, net, mean=None):
@@ -196,7 +224,7 @@ class EBM(nn.Module):
             bd = base_dist.log_prob(x).sum(-1)
 
         logp = self.net(x).squeeze()
-        return logp - bd # or +?
+        return -logp - bd # or +?
 
 class MLPScore(nn.Module):
     def __init__(self, input_dim, hidden_dims, scale=1.0, nonlinearity='swish', act_last=None, bn=False, dropout=-1, bound=-1):

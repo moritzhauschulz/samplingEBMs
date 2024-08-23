@@ -21,9 +21,18 @@ from velo_dfm.train import main_loop as velo_dfm_main_loop
 from velo_dfs.train import main_loop as velo_dfs_main_loop
 from velo_edfm.train import main_loop as velo_edfm_main_loop
 from velo_edfs.train import main_loop as velo_edfs_main_loop
-from velo_efm_ebm.train import main_loop as velo_efm_ebm_main_loop
-from velo_efm_ebm_bootstrap.train import main_loop as velo_efm_ebm_bootstrap_main_loop
-from velo_efm_ebm_bootstrap_2.train import main_loop as velo_efm_ebm_bootstrap_2_main_loop
+# from velo_edfm_ebm.train import main_loop as velo_edfm_ebm_main_loop
+from velo_ebm.train import main_loop as velo_ebm_main_loop
+from velo_bootstrap_ebm.train import main_loop as velo_bootstrap_ebm_main_loop
+from velo_bootstrap_v2_ebm.train import main_loop as velo_bootstrap_v2_ebm_main_loop
+
+
+from velo_dfm_baf_ebm.train import main_loop as velo_dfm_baf_ebm_main_loop
+from dfm_baf_ebm_dula.train import main_loop as dfm_baf_ebm_dula_main_loop
+
+
+# from velo_edfm_ebm_bootstrap.train import main_loop as velo_edfm_ebm_bootstrap_main_loop
+# from velo_edfm_ebm_bootstrap_2.train import main_loop as velo_edfm_ebm_bootstrap_2_main_loop
 
 def get_args():
     parser = argparse.ArgumentParser(description='Pipeline')
@@ -33,8 +42,10 @@ def get_args():
             'eb_gfn', 'gfn', 'ed_ebm',
             'punidb', 'runidb','velo_dfm',
             'velo_dfs', 'velo_edfm', 
-            'velo_edfs', 'velo_efm_ebm', 
+            'velo_edfs', 'velo_edfm_ebm', 'velo_bootstrap_ebm', 
+            'velo_bootstrap_v2_ebm',
             'velo_efm_ebm_bootstrap', 'velo_efm_ebm_bootstrap_2',
+            'velo_dfm_baf_ebm', 'dfm_baf_ebm_dula', 'velo_ebm'
         ],
     )
 
@@ -50,7 +61,7 @@ def get_args():
     parser.add_argument('--p_control', type=float, default=0.0)
     parser.add_argument('--l2', type=float, default=0.0)
     parser.add_argument('--store_ebm_ema', type=int, default=1, choices=[0,1])
-    parser.add_argument('--warmup_iters', type=int, default=100) #10000
+    parser.add_argument('--warmup_iters', type=int, default=0) #10000
     parser.add_argument('--ebm_lr', type=float, default=.0001)
 
     # mcmc
@@ -60,22 +71,24 @@ def get_args():
     parser.add_argument('--use_buffer', type=int, default=0, choices=[0,1])
     parser.add_argument('--sampler', type=str, default='dula')
     parser.add_argument('--seed', type=int, default=1234567)
-    parser.add_argument('--sampling_steps', type=int, default=100)
+    parser.add_argument('--sampling_steps', type=int, default=40)
     parser.add_argument('--reinit_freq', type=float, default=0.0)
     parser.add_argument('--eval_sampling_steps', type=int, default=10000)
-    parser.add_argument('--buffer_size', type=int, default=1000)
+    parser.add_argument('--buffer_size', type=int, default=10000)
     parser.add_argument('--buffer_init', type=str, default='mean')
     parser.add_argument('--step_size', type=float, default=0.1)
 
     #dfm/dfs related
+    parser.add_argument('--dfs', type=int, choices=[0,1]) #only applies if the method is specified jointly for dfs/dfm (e.g. velo_ebm)
+    parser.add_argument('--enable_backward', type=int, default=0, choices=[0,1])
     parser.add_argument('--lr', type=float, default=.0001)
-    parser.add_argument('--scheduler_type', type=str, default='quadratic', choices=['quadratic', 'quadratic_noise', 'linear'])
+    parser.add_argument('--scheduler_type', type=str, default='linear', choices=['cubic','quadratic', 'quadratic_noise', 'linear'])
     parser.add_argument('--store_dfs_ema', type=int, default=0, choices=[0,1])
     parser.add_argument('--dfm_step', type=int, default=0, choices=[0,1])
     parser.add_argument('--mixer_step', type=int, default=0, choices=[0,1])
     parser.add_argument('--mixer_type', type=str, default='uniform', choices=['uniform','data_mean'])
     parser.add_argument('--source', type=str, default='mask', choices=['mask','uniform','data','omniglot'])
-    parser.add_argument('--dfs_warmup_iter', type=int, default=0)
+    parser.add_argument('--dfs_warmup_iter', type=int, default=1000)
     parser.add_argument('--dfs_per_ebm', type=int, default=1)
     parser.add_argument('--delta_t', type=float, default=0.05)
     parser.add_argument('--impute_self_connections', type=int, default=1, choices=[0,1])
@@ -100,6 +113,15 @@ def get_args():
     parser.add_argument('--optimal_temp_diff', type=float, default=0.5)
     parser.add_argument('--q', type=str, default='data_mean', choices=['data_mean','random'])
 
+    #back and forth
+    parser.add_argument("--rand_t", "--rt", type=int, default=0, choices=[0, 1])
+    parser.add_argument("--lin_t", "--lt", type=int, default=0, choices=[0, 1])
+    parser.add_argument("--warmup_baf", "--wbaf", type=lambda x: int(float(x)), default=0, help="need to use w/ lin_t")
+    parser.add_argument("--t", type=float, default=-1.0, help="for gfn back forth negative sample generation")
+    parser.add_argument("--with_mh", "--wm", type=int, default=1, choices=[0, 1])
+
+
+
     #gfn related
     parser.add_argument('--print_every', "--pe", type=int, default=100)
     parser.add_argument('--plot_every', type=int, default=2500)
@@ -116,11 +138,8 @@ def get_args():
     parser.add_argument("--train_steps", "--ts", type=int, default=1)
     parser.add_argument("--l1loss", "--l1l", type=int, default=0, choices=[0, 1], help="use soft l1 loss instead of l2")
 
-    parser.add_argument("--with_mh", "--wm", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--rand_k", "--rk", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--lin_k", "--lk", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--warmup_k", "--wk", type=lambda x: int(float(x)), default=0, help="need to use w/ lin_k")
-    parser.add_argument("--K", type=int, default=-1, help="for gfn back forth negative sample generation")
+    parser.add_argument("--warmup_", "--wk", type=lambda x: int(float(x)), default=0, help="need to use w/ lin_k")
+
 
     parser.add_argument("--rand_coef", "--rc", type=float, default=0, help="for tb")
     parser.add_argument("--back_ratio", "--br", type=float, default=0.)
@@ -155,7 +174,7 @@ def get_args():
     #bootstrap ebm-dfs
     parser.add_argument('--optional_step', type=int, default=0, choices=[0,1])
     parser.add_argument('--alpha', type=float, default=0.25)
-    parser.add_argument('--recycle_dfs_sample', type=int, default=1, choices=[0,1])
+    parser.add_argument('--recycle_dfs_sample', type=int, default=0, choices=[0,1])
     
     args = parser.parse_args()
 
@@ -226,3 +245,4 @@ if __name__ == '__main__':
     main_fn = eval(f'{args.methods}_main_loop')
 
     main_fn(args, verbose=True)
+

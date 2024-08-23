@@ -2,6 +2,60 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
+
+class Dataq:
+    def __init__(self, args, bernoulli_mean=None):
+        assert 0 <= args.q_weight <= 1, "Q Weight parameter must be between 0 and 1."
+        
+        self.weight = args.q_weight
+        if bernoulli_mean is not None and self.weight > 0:
+            self.bernoulli_dist = torch.distributions.Bernoulli(probs=bernoulli_mean)
+        else:
+            self.weight = 0
+            print(f'Bernoulli weight set to zero.')
+        self.device = args.device
+        self.batch_size = args.batch_size
+        
+    def sample(self, empirical_samples):
+        num_empirical = int((1 - self.weight) * self.batch_size)
+        num_bernoulli = self.batch_size - num_empirical
+        
+        # Sample from empirical distribution
+        if num_empirical > 0 and num_empirical < self.batch_size:
+            empirical_indices = np.random.choice(self.batch_size, size=num_empirical, replace=False)
+            empirical_samples = empirical_samples[empirical_indices].to(self.device)
+            is_empirical = torch.ones((num_empirical,)).to(self.device)
+            empirical_log_likelihood = (torch.ones((self.num_empirical,)) * torch.log(torch.tensor(1/self.batch_size))).to(self.device) + torch.log(torch.tensor(1 - self.weight)).to(self.device)
+            bernoulli_samples = self.bernoulli_dist.sample((num_bernoulli,)).to(self.device)
+            bernoulli_log_likelihood = self.bernoulli_dist.log_prob(bernoulli_samples).sum(dim=-1).to(self.device) + torch.log(torch.tensor(self.weight)).to(self.device)
+            is_bernoulli = torch.zeros((num_bernoulli,)).to(self.device)
+            combined_samples = torch.cat([empirical_samples, bernoulli_samples])
+            indices = torch.randperm(combined_samples.size(0))
+            combined_samples = combined_samples[indices]
+            self.is_empirical = torch.cat([is_empirical,is_bernoulli])[indices]
+            self.last_log_likelihood = torch.cat([empirical_log_likelihood, bernoulli_log_likelihood])[indices]
+        elif num_bernoulli == 0:
+            empirical_indices = np.random.choice(self.batch_size, size=num_empirical, replace=False)
+            combined_samples = empirical_samples[empirical_indices]
+            is_empirical = torch.ones((num_empirical,)).to(self.device)
+            empirical_log_likelihood = (torch.ones((num_empirical,)) * torch.log(torch.tensor(1/self.batch_size))).to(self.device) + torch.log(torch.tensor(1 - self.weight)).to(self.device)
+            self.is_empirical = is_empirical
+            self.last_log_likelihood = empirical_log_likelihood
+        elif num_empirical == 0:
+            combined_samples = self.bernoulli_dist.sample((num_bernoulli,)).to(self.device)
+            bernoulli_log_likelihood = self.bernoulli_dist.log_prob(combined_samples).sum(dim=-1).to(self.device) + torch.log(torch.tensor(self.weight)).to(self.device)
+            is_bernoulli = torch.zeros((num_bernoulli,)).to(self.device)
+            self.is_empirical = is_bernoulli
+            self.last_log_likelihood = bernoulli_log_likelihood
+
+        return combined_samples
+    
+    def get_last_log_likelihood(self):
+        return self.last_log_likelihood
+
+    def get_last_is_empirical(self):
+        return self.is_empirical
 
 def timestep_embedding(timesteps, dim, max_period=10000):
     """
@@ -82,10 +136,7 @@ class ResNetFlow(nn.Module):
         super().__init__()
         D = args.discrete_dim
         S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
-        self.scheduler_noise = 1 if args.scheduler_type == 'quadratic_noise' else 0
 
-        if self.scheduler_noise:
-            S_noise = S
 
         self.x_proj_linear = nn.Sequential(
             nn.Linear(28*28, 1024),
@@ -106,9 +157,6 @@ class ResNetFlow(nn.Module):
         all = downsample + main
         self.net = nn.Sequential(*all)
         self.output_linear = nn.Linear(n_channels, D*S)
-        if self.scheduler_noise:
-            self.output_linear_noise = nn.Linear(n_channels, D*S_noise)
-
 
     def forward(self, xt, t):
         B, D = xt.shape
@@ -122,72 +170,25 @@ class ResNetFlow(nn.Module):
         h = self.net(input)
         h = h.view(h.size(0), h.size(1), -1).mean(-1)   # mean pooling: (B, C, D) -> (B, C)
 
-        S_out = self.output_linear(h).reshape(B, D, -1)  # (B, C) -> (B, D*S)
-        if self.scheduler_noise:
-            S_noise_out = self.output_linear_noise(h).reshape(B, D, -1)
+        out = self.output_linear(h)  # (B, C) -> (B, D*S)
+        #out = F.relu(out)
+        return out.reshape(B, D, -1)   # (B, D, S)
+
+class EBM(nn.Module):
+    def __init__(self, net, mean=None):
+        super().__init__()
+        self.net = net
+        if mean is None:
+            self.mean = None
         else:
-            S_noise_out = None
-        return S_out, S_noise_out    # (B, D, S)
+            self.mean = nn.Parameter(mean, requires_grad=False)
 
-class MLPModel(nn.Module):
-    def __init__(self, args):
-        super(MLPModel, self).__init__()
-
-        D = args.discrete_dim
-        S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
-        self.model_has_noise = args.model_has_noise
-        self.enable_backward = args.enable_backward
-        if self.model_has_noise:
-            S_noise = S
-        if self.enable_backward:
-            S_source = S
-        self.relu = args.relu
-        
-        self.embedding = nn.Embedding(args.vocab_size_with_mask, 16)
-        self.net = nn.Sequential(
-            nn.Linear((16+1) * D, 1024),
-            Swish(),
-            nn.Linear(1024, 1024),
-            Swish(),
-            nn.Linear(1024, 1024),
-            Swish(),
-        )
-
-        self.output_linear = nn.Sequential(
-            nn.Linear(1024, D * S)
-        )
-        if self.model_has_noise:
-            self.output_linear_noise = nn.Sequential(
-                nn.Linear(1024, D * S_noise),
-            )
-        if self.enable_backward:
-            self.output_linear_backward = nn.Sequential(
-                nn.Linear(1024, D * S_source),
-            )
-    
-    def forward(self, x, t):
-        B, D = x.shape
-
-        x_emb = self.embedding(x)   # (B, D, 16)
-        t_expanded = t[:, None, None].repeat(1, D, 1) 
-
-        net_input = torch.cat([x_emb, t_expanded], dim=-1).reshape(B, -1) # (B, D * 17)
-        
-        h = self.net(net_input)
-
-        S_out = self.output_linear(h).reshape(B, D, -1)  # (B, C) -> (B, D*S)
-        if self.relu:
-            S_out = F.relu(S_out)
-        if self.model_has_noise:
-            S_noise_out = self.output_linear_noise(h).reshape(B, D, -1)
-            if self.relu:
-                S_noise_out = F.relu(S_noise_out)
+    def forward(self, x):
+        if self.mean is None:
+            bd = 0.
         else:
-            S_noise_out = None
-        if self.enable_backward:
-            S_back_out = self.output_linear_backward(h).reshape(B, D, -1)
-            if self.relu:
-                S_back_out = F.relu(S_back_out)
-        else:
-            S_back_out = None
-        return S_out, S_back_out, S_noise_out    # (B, D, S)
+            base_dist = torch.distributions.Bernoulli(probs=self.mean)
+            bd = base_dist.log_prob(x).sum(-1)
+
+        logp = self.net(x).squeeze()
+        return logp + bd

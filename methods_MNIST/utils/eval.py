@@ -456,12 +456,12 @@ def rbf_mmd(x, y, args, sigma=None, log_path='toy_data_euclidean_dist_stats.csv'
 
 
 def ebm_evaluation(args, db, ebm, write_to_index=True, batch_size=4000, ais_samples=1000000, num_ais_mcmc_steps=25, ais_num_steps=1000):
-  print_cuda_memory_stats()
   #NLL
   log_Z = annealed_importance_sampling(args, ebm, ais_samples, ais_num_steps, num_ais_mcmc_steps, args.discrete_dim)
   nll_samples = get_batch_data(db, args, batch_size=batch_size)
   nll_samples = torch.from_numpy(np.float32(nll_samples)).to(args.device)
-  nll = ebm(nll_samples) - log_Z
+  with torch.no_grad():
+    nll = ebm(nll_samples) - log_Z
   nll = torch.sum(nll) / batch_size
 
   #MDD
@@ -484,15 +484,17 @@ def ebm_evaluation(args, db, ebm, write_to_index=True, batch_size=4000, ais_samp
   return nll.item(), hamming_mmd.item(), bandwidth.item(), euclidean_mmd.item(), sigma.item()
 
 
-def sampler_evaluation(args, db, sampler_function, write_to_index=True, batch_size=4000):
+def sampler_evaluation(args, db, model, gen_samples, batch_size=4000):
   #note: there is no immedaite way to obtain NLL for DFS – this would require sampling a backward trajectory...
-  print_cuda_memory_stats()
-  #MDD
   exp_hamming_mmd_list = []
   rbf_mmd_list = []
   for _ in range(10):
-    x = sampler_function(batch_size).to('cpu')
-    y = get_batch_data(db, args, batch_size=batch_size)
+    if args.source == 'data':
+      xt = torch.from_numpy(get_batch_data(db, args, batch_size = 4000)).to(args.device)
+    else:
+      xt = None
+    x = torch.from_numpy(gen_samples(model, args, batch_size = 4000, xt=xt)).to('cpu')
+    y = get_batch_data(db, args, batch_size=4000)
     y = torch.from_numpy(np.float32(y)).to('cpu')
     hamming_mmd, bandwidth = exp_hamming_mmd(x,y,args)
     euclidean_mmd, sigma = rbf_mmd(x,y,args)
@@ -500,9 +502,6 @@ def sampler_evaluation(args, db, sampler_function, write_to_index=True, batch_si
     rbf_mmd_list.append(euclidean_mmd)
   hamming_mmd = sum(exp_hamming_mmd_list)/10
   euclidean_mmd = sum(rbf_mmd_list)/10
-
-
-  # print(f'Exponential Hamming MMD of SAMPLER against data on 10x{batch_size} samples: {mmd}')
   
   return hamming_mmd.item(), bandwidth.item(), euclidean_mmd.item(), sigma.item()
 
@@ -539,16 +538,18 @@ def compute_mmd_base_stats(args, N, db, write_to_index=True, batch_size=4000):
   
   return hamming_mean_mmd, hamming_var_mmd, bandwidth.item(), euclidean_mean_mmd, euclidean_var_mmd, sigma.item(),
 
-def sampler_ebm_evaluation(args, db, sampler_function, ebm, write_to_index=True, batch_size=4000):
+def sampler_ebm_evaluation(args, db, model, gen_samples, ebm_model, batch_size=4000):
   #note: there is no immedaite way to obtain NLL for DFS – this would require sampling a backward trajectory...
-  print_cuda_memory_stats()
-  #MDD
   exp_hamming_mmd_list = []
   rbf_mmd_list = []
+  gibbs_sampler = GibbsSampler(2, args.discrete_dim, args.device)
   for _ in range(10):
-    x = sampler_function(batch_size).to('cpu')
-    gibbs_sampler = GibbsSampler(n_choices = args.vocab_size, discrete_dim=args.discrete_dim, device=args.device)
-    y = gibbs_sampler(ebm, num_rounds=100, num_samples=batch_size).to('cpu')
+    if args.source == 'data':
+      xt = torch.from_numpy(get_batch_data(db, args, batch_size = 4000)).to(args.device)
+    else:
+      xt = None
+    x = torch.from_numpy(gen_samples(model, args, batch_size = 4000, xt=xt)).to('cpu')
+    y = gibbs_sampler(ebm_model, num_rounds=100, num_samples=4000).to('cpu')
     hamming_mmd, bandwidth = exp_hamming_mmd(x,y,args)
     euclidean_mmd, sigma = rbf_mmd(x,y,args)
     exp_hamming_mmd_list.append(hamming_mmd)
@@ -556,9 +557,6 @@ def sampler_ebm_evaluation(args, db, sampler_function, ebm, write_to_index=True,
   hamming_mmd = sum(exp_hamming_mmd_list)/10
   euclidean_mmd = sum(rbf_mmd_list)/10
 
-
-  # print(f'Exponential Hamming MMD of SAMPLER against EBM on 10x{batch_size} samples: {mmd}')
-  
   return hamming_mmd.item(), bandwidth.item(), euclidean_mmd.item(), sigma.item()
 
 
