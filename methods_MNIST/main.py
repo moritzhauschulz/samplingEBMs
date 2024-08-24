@@ -27,6 +27,7 @@ from velo_bootstrap_ebm.train import main_loop as velo_bootstrap_ebm_main_loop
 from velo_bootstrap_v2_ebm.train import main_loop as velo_bootstrap_v2_ebm_main_loop
 
 
+from velo_baf_ebm.train import main_loop as velo_baf_ebm_main_loop
 from velo_dfm_baf_ebm.train import main_loop as velo_dfm_baf_ebm_main_loop
 from dfm_baf_ebm_dula.train import main_loop as dfm_baf_ebm_dula_main_loop
 
@@ -45,7 +46,7 @@ def get_args():
             'velo_edfs', 'velo_edfm_ebm', 'velo_bootstrap_ebm', 
             'velo_bootstrap_v2_ebm',
             'velo_efm_ebm_bootstrap', 'velo_efm_ebm_bootstrap_2',
-            'velo_dfm_baf_ebm', 'dfm_baf_ebm_dula', 'velo_ebm'
+            'velo_dfm_baf_ebm','velo_baf_ebm', 'dfm_baf_ebm_dula', 'velo_ebm', 
         ],
     )
 
@@ -116,7 +117,7 @@ def get_args():
     #back and forth
     parser.add_argument("--rand_t", "--rt", type=int, default=0, choices=[0, 1])
     parser.add_argument("--lin_t", "--lt", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--warmup_baf", "--wbaf", type=lambda x: int(float(x)), default=0, help="need to use w/ lin_t")
+    parser.add_argument("--warmup_baf", "--wbaf", type=lambda x: int(float(x)), default=1, help="need to use w/ lin_t")
     parser.add_argument("--t", type=float, default=-1.0, help="for gfn back forth negative sample generation")
     parser.add_argument("--with_mh", "--wm", type=int, default=1, choices=[0, 1])
 

@@ -8,44 +8,52 @@ import torchvision
 from tqdm import tqdm
 import time
 from itertools import cycle
+import random
+
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
-
+from utils.eval import plot_weight_histogram
+import argparse
 import utils.samplers as samplers
-import utils.utils as utils
 from utils.utils import get_batch_data
 from utils.utils import plot as toy_plot
-from utils.utils import get_x0
-from utils.eval import plot_weight_histogram
-from utils.utils import get_optimal_temp
-from utils.sampler import GibbsSampler
+import utils.block_samplers as block_samplers
+from utils.toy_data_lib import get_db
+import torch.nn as nn
+import utils.ais as ais
+import utils.utils as utils
 
-import utils.vamp_utils as vamp_utils
-
-from utils.eval import log
-from utils.eval import log_completion
-from utils.eval import get_eval_timestamp
 from utils.eval import exp_hamming_mmd
 from utils.eval import rbf_mmd
+from utils.eval import ebm_evaluation
 from utils.eval import sampler_ebm_evaluation
 from utils.eval import sampler_evaluation
-from utils.toy_data_lib import get_db
 
-from utils.eval import ebm_evaluation
-import utils.ais as ais
+import utils.vamp_utils as vamp_utils
+from utils.eval import log
+from utils.eval import log_completion
 
 from utils.model import ResNetFlow, EBM, MLPModel, MLPScore
 from utils.utils import get_sampler
+from utils.utils import get_x0
 from utils.utils import align_batchsize
 
-from velo_dfs.train import gen_samples as dfs_gen_samples
-from velo_edfs.train import compute_loss as compute_edfs_loss
-from velo_dfs.train import compute_loss as compute_dfs_loss
+from utils.sampler import GibbsSampler 
 
+from velo_dfm.train import gen_samples
+from velo_dfm.train import gen_back_samples
 
-from velo_dfm.train import gen_samples as dfm_gen_samples
-from velo_edfm.train import compute_loss as compute_edfm_loss
 from velo_dfm.train import compute_loss as compute_dfm_loss
+from velo_dfm.train import gen_samples as dfm_gen_samples
+from velo_dfm.train import gen_back_samples as dfm_gen_back_samples
+from velo_edfm.train import compute_loss as compute_edfm_loss
+
+from velo_dfs.train import compute_loss as compute_dfs_loss
+from velo_dfs.train import gen_samples as dfs_gen_samples
+from velo_dfs.train import gen_back_samples as dfs_gen_back_samples
+from velo_edfs.train import compute_loss as compute_edfs_loss
+
+from utils.eval import get_eval_timestamp
 
 def make_sampler(args):
     if args.dfs:
@@ -53,6 +61,13 @@ def make_sampler(args):
     else:
         gen_samples = dfm_gen_samples
     return gen_samples
+
+def make_back_sampler(args):
+    if args.dfs:
+        gen_samples = dfs_gen_back_samples
+    else:
+        gen_samples = dfm_gen_back_samples
+    return gen_back_samples
 
 def make_eloss(args):
     if args.dfs:
@@ -68,8 +83,6 @@ def make_loss(args):
         compute_loss = compute_dfm_loss
     return compute_loss
 
-
-
 def main_loop(args, verbose=False):
 
     #set random seeds
@@ -82,6 +95,39 @@ def main_loop(args, verbose=False):
         main_loop_real(args, verbose)
     log_completion(args.methods, args.dataset_name, args)
 
+def get_x_fake(B,D,S,t_target,sampler,back_sampler, x, dfs_model, ebm_model, args, save_inter = False):
+    x_turn, logp_to_x, logp_from_x = back_sampler(dfs_model, args, x, t_target = t_target,return_logp=True)
+    x_prime, logp_to_x_prime, logp_from_x_prime = sampler(dfs_model, args, t = t_target, xt = x_turn, return_logp=True)
+
+    logp_x_to_x_prime = logp_from_x + logp_to_x_prime
+    logp_x_prime_to_x = logp_from_x_prime + logp_to_x
+    logp_delta = logp_x_prime_to_x - logp_x_to_x_prime
+
+    logp_delta = logp_delta.detach()
+    if args.with_mh:
+        # MH step, calculate log p(x') - log p(x)
+        logp_x = -ebm_model(x.float())
+        logp_x_prime = -ebm_model(x_prime.float())
+        lp_update = logp_x_prime - logp_x
+        update_probs = lp_update.exp().clamp(max=1)
+        updates = torch.bernoulli(update_probs)
+        x_fake = x_prime * updates[:, None] + x * (1. - updates[:, None])
+        update_success_rate = updates.mean().item()
+    else:
+        x_fake = x_prime
+        update_success_rate = None
+
+    #debugging
+    if save_inter:
+        plot = lambda p, x: torchvision.utils.save_image(x.view(x.size(0),
+                                                            args.input_size[0], args.input_size[1], args.input_size[2]),
+                                                        p, normalize=True, nrow=int(x.size(0) ** .5))
+        plot(f'{args.sample_path}/x_turn_{epoch}.png', x_turn.float())
+        plot(f'{args.sample_path}/x_{epoch}.png', x.float())
+        plot(f'{args.sample_path}/x_prime_{epoch}.png', x_prime.float())
+        plot(f'{args.sample_path}/x_fake_{epoch}.png', x_fake.float())
+
+    return x_fake.long(), update_success_rate, t_target
 
 def main_loop_real(args, verbose=False):
 
@@ -89,26 +135,27 @@ def main_loop_real(args, verbose=False):
     train_loader, val_loader, test_loader, args = vamp_utils.load_dataset(args)
     plot = lambda p, x: torchvision.utils.save_image(x.view(x.size(0),
                                                             args.input_size[0], args.input_size[1], args.input_size[2]),
-                                                    p, normalize=True, nrow=int(x.size(0) ** .5))
+                                                     p, normalize=True, nrow=int(x.size(0) ** .5))
+    source_train_loader = copy.deepcopy(train_loader)
     inner_source_train_loader = copy.deepcopy(train_loader)
-    inner_train_loader = copy.deepcopy(train_loader)
+    inner_target_train_loader = copy.deepcopy(train_loader)
 
     gen_samples = make_sampler(args)
+    gen_back_samples = make_back_sampler(args)
     compute_loss = make_loss(args)
     compute_eloss = make_eloss(args)
 
-    source_train_loader1 = copy.deepcopy(train_loader)
-    source_train_loader2 = copy.deepcopy(train_loader)
+    args.itr_per_epoch = len(train_loader)
 
-    def preprocess(data, args=args):
+    def preprocess(data):
         if args.dynamic_binarization:
             return torch.bernoulli(data)
         else:
             return data
-            
+    
     def get_independent_sample(loader, args=args):
         (x, _) = next(iter(loader))
-        return preprocess(x, args)
+        return preprocess(x)
 
     if args.q == 'data_mean':
         init_batch = []
@@ -122,7 +169,6 @@ def main_loop_real(args, verbose=False):
         q_dist = torch.distributions.Bernoulli(probs=0.5 * torch.ones((args.discrete_dim,)).to(args.device))
 
     init_dist = torch.distributions.Bernoulli(probs=init_mean)
-
 
     # make dfs model
     dfs_model = ResNetFlow(64, args)
@@ -157,176 +203,157 @@ def main_loop_real(args, verbose=False):
     #get sampler
     sampler = get_sampler(args) #for eval
 
-    #set temperature
+    best_val_ll = -np.inf
+    dfs_lr = args.lr
+    ebm_lr = args.ebm_lr
+
+    test_ll_list = []
+
     temp = args.start_temp
-
-
+   
     start_time = time.time()
     cum_eval_time = 0
-    temp = args.start_temp
-
 
     #warmup
-    for i in range(args.dfs_warmup_iter):
-        (B, D) = args.batch_size, args.discrete_dim
+    for i, (inner_x_source, _) in zip(range(args.dfs_warmup_iter), cycle(inner_source_train_loader)):
+        (B, D) = inner_x_source.shape
         x1 = q_dist.sample((B,)).to(args.device).long()
         S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
         t = torch.rand((B,)).to(args.device)
 
-        if args.source == 'data':
-            x0 = torch.from_numpy(get_batch_data(db, args)).to(args.device)  
+        if args.source in ['data','omniglot']:
+            x0 = preprocess(inner_x_source).long().to(args.device)
         else:
             x0 = get_x0(B,D,S,args)
-
+        
         log_p_prob = -ebm_model(x1.float())
-
         log_q_prob = q_dist.log_prob(x1.float()).sum(dim=-1).to(args.device)
 
-        dfs_loss, weights, temp = compute_loss(dfs_model, B, D, S, log_p_prob, log_q_prob, t, x1, x0, args, temp)
+        dfs_loss, weights, temp = compute_eloss(dfs_model, B, D, S, log_p_prob, log_q_prob, t, x1, x0, args, temp)
         
         dfs_optimizer.zero_grad()
         dfs_loss.backward()
         dfs_optimizer.step()
 
-        # update ema_model
-        for p, ema_p in zip(dfs_model.parameters(), ema_dfs_model.parameters()):
-            ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
-        
+    # update ema_model
+    for p, ema_p in zip(dfs_model.parameters(), ema_dfs_model.parameters()):
+        ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
+
     print(f'Warmup completed with dfs loss of {dfs_loss.item()} after {args.dfs_warmup_iter} iterations.')
     #save dfs samples
     if args.source == 'data':
-        xt = torch.from_numpy(get_batch_data(db, args, batch_size = 2500)).to(args.device)
+        xt = get_independent_sample(test_loader).long().to(args.device)
     else:
         xt = None
-    samples = gen_samples(dfs_model, args, batch_size = 2500, xt=xt)
+    samples = gen_samples(dfs_model, args, batch_size=100, xt=xt)
     plot(f'{args.sample_path}/post_warmup_dfs_samples_.png', torch.tensor(samples).float())
 
-
     for epoch in range(1, args.num_epochs + 1):
+        
         dfs_model.train()
-        ebm_model.train()
+        ebm_model.eval()
         pbar = tqdm(train_loader) if verbose else train_loader
 
         dfs_times = []
-        dfs_optional_times = []
         ebm_times = []
 
-        if epoch < args.warmup_iters:
-            ebm_lr = args.ebm_lr * float(epoch) / args.warmup_iters
-            for param_group in ebm_optimizer.param_groups:
-                param_group['lr'] = ebm_lr
+        for itr, ((x, _), (x_source, _)) in enumerate(zip(pbar, cycle(source_train_loader))):
+            x, x_source = align_batchsize(x, x_source)
 
-        for it, ((x, _), (x_source1, _), (x_source2, _)) in enumerate(zip(pbar, cycle(source_train_loader1), cycle(source_train_loader2))):
+            (B, D) = x_source.shape
+            S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
 
-            dfs_start_time = time.time()
-            x, x_source1 = align_batchsize(x, x_source1)
-            _, x_source2 = align_batchsize(x, x_source2)
+            if itr < args.warmup_iters:
+                ebm_lr = args.ebm_lr * float(itr) / args.warmup_iters
+                for param_group in ebm_optimizer.param_groups:
+                    param_group['lr'] = ebm_lr
 
-            x = preprocess(x.to(args.device).requires_grad_())
-            if args.source == 'data':
-                xt = preprocess(x_source1).long().to(args.device)
-            else:
-                xt = get_x0(B,D,S,args)
-
-            if it == 0 or not args.recycle_dfs_sample: 
-                x_fake = torch.tensor(gen_samples(dfs_model, args, batch_size=x.shape[0], xt=xt)).to(args.device).detach()
-            
-            for i, ((inner_x, _), (inner_x_source, _)) in zip(range(args.dfs_per_ebm), zip(inner_train_loader, cycle(inner_source_train_loader))):
-
-                inner_x, inner_x_source = align_batchsize(inner_x, inner_x_source)
-                
-                if i == 0:
-                    x1 = x.long().to(args.device) #learn on the datapoint that the ebm will learn on next...
-                    x1, _ = align_batchsize(inner_x, inner_x_source)
-                else:
-                    x1 = preprocess(inner_x).long().to(args.device) 
-
-                (B, D) = x1.shape
-                S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
-                t = torch.rand((B,)).to(args.device)
-
-                if args.source == 'data':
-                    x0 = preprocess(inner_x_source).long().to(args.device)
-                else:
-                    x0 = get_x0(B,D,S,args).to(args.device)
-
-                dfs_loss, acc = compute_loss(dfs_model,B,D,S,t,x1.long().to(args.device),x0.long().to(args.device),args)
-
-                dfs_optimizer.zero_grad()
-                dfs_loss.backward()
-                dfs_optimizer.step()
-
-            # update ema_model
-            for p, ema_p in zip(dfs_model.parameters(), ema_dfs_model.parameters()):
-                ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
-
-            #make x_dfs 
-            if args.source == 'data':
-                xt = preprocess(x_source2).long().to(args.device)
-            else:
-                xt = get_x0(B,D,S,args)
-            x_dfs = torch.from_numpy(gen_samples(dfs_model, args, xt=xt)).to(args.device)
-            dfs_pause_time = time.time()
-
-            #ebm-data loss
             ebm_start_time = time.time()
-            logp_real = -ebm_model(x).squeeze()
+            x = preprocess(x.to(args.device).requires_grad_())
+
+            if args.rand_t:
+                t_target = random.random()
+            elif args.lin_t:
+                t_target = 1 - min(1, (args.itr_per_epoch * (epoch - 1) + itr + 1)/ (args.itr_per_epoch * args.warmup_baf))
+            elif args.t > 0:
+                t_target = args.t
+            else:
+                raise ValueError
+            save_inter = True if itr % 100 == 0 and epoch % args.epoch_save == 0 else False
+            x_fake, success_rate, t_target = get_x_fake(B,D,S,t_target,gen_samples, gen_back_samples, x.long(), dfs_model, ebm_model, args, save_inter)            
+
+            logp_real = -ebm_model(x.float()).squeeze()
             if args.p_control > 0:
                 grad_ld = torch.autograd.grad(logp_real.sum(), x,
-                                                create_graph=True)[0].flatten(start_dim=1).norm(2, 1)
-                grad_reg_real = (grad_ld ** 2. / 2.).mean() * args.p_control
+                                              create_graph=True)[0].flatten(start_dim=1).norm(2, 1)
+                grad_reg = (grad_ld ** 2. / 2.).mean() * args.p_control
             else:
-                grad_reg_real = 0.0
+                grad_reg = 0.0
+
             logp_fake = -ebm_model(x_fake.float()).squeeze()
-            ebm_data_loss = -(logp_real.mean() - logp_fake.mean()) + grad_reg_real + args.l2 * ((logp_real ** 2.).mean() + (logp_fake ** 2.).mean())
 
-            #ebm-dfs loss
-            logp_dfs = -ebm_model(x_dfs.float()).squeeze()
-            if args.p_control > 0:
-                grad_ld = torch.autograd.grad(logp_dfs.sum(), x,
-                                                create_graph=True)[0].flatten(start_dim=1).norm(2, 1)
-                grad_reg_dfs = (grad_ld ** 2. / 2.).mean() * args.p_control
-            else:
-                grad_reg_dfs = 0.0
-            ebm_dfs_loss = -(logp_dfs.mean() - logp_fake.mean()) + grad_reg_dfs + args.l2 * ((logp_dfs ** 2.).mean() + (logp_fake ** 2.).mean())
-
-            ebm_loss = args.alpha * ebm_data_loss + (1 - args.alpha) * ebm_dfs_loss
+            obj = logp_real.mean() - logp_fake.mean()
+            ebm_loss = -obj + grad_reg + args.l2 * ((logp_real ** 2.).mean() + (logp_fake ** 2.).mean())
 
             ebm_optimizer.zero_grad()
             ebm_loss.backward()
             ebm_optimizer.step()
 
-            for p, ema_p in zip(ebm_model.parameters(), ema_ebm_model.parameters()):
-                ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
-                ebm_end_time = time.time()
-
             ebm_end_time = time.time()
+            ebm_times.append(ebm_end_time - ebm_start_time)
 
-            #without the optional step for now
-            dfs_restart_time = time.time()
-            if args.optional_step:
-                logp_dfs_old = logp_dfs
-                logp_dfs = -ebm_model(x_dfs.float()).squeeze()
+            dfs_start_time = time.time()
+            for i, (inner_x_source, _) in zip(range(args.dfs_per_ebm), cycle(inner_source_train_loader)):
+                x, inner_x_source = align_batchsize(x, inner_x_source)
+                (B, D) = x.shape
+                S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+                t = torch.rand((B,)).to(args.device)
 
-                dfs_loss, weights, temp = compute_eloss(dfs_model, B, D, S, logp_dfs, logp_dfs_old, t, x_dfs, x0, args, temp)
+                x = preprocess(x.to(args.device)).long()
+                
+                # restore_mh = args.with_mh
+                # args.with_mh = True
+                if args.rand_t:
+                    t_target = random.random()
+                elif args.lin_t:
+                    t_target = 1 - min(1, (args.itr_per_epoch * (epoch - 1) + itr + 1)/ (args.itr_per_epoch * args.warmup_baf))
+                elif args.t > 0:
+                    t_target = args.t
+                else:
+                    raise ValueError
+                x1, _, _ = get_x_fake(B, D, S, t_target, gen_samples, gen_back_samples, x, dfs_model, ebm_model, args)
+                # args.with_mh = restore_mh
 
+                if args.source in ['data', 'omniglot']:
+                    x0 = preprocess(inner_x_source).long().to(args.device)
+                else:
+                    x0 = get_x0(B,D,S,args)
+                
+                dfs_loss, acc = compute_loss(dfs_model, B, D, S, t, x1, x0, args) 
+                
                 dfs_optimizer.zero_grad()
                 dfs_loss.backward()
                 dfs_optimizer.step()
-            dfs_end_time = time.time()
 
-            dfs_times.append(dfs_pause_time - dfs_start_time)
-            dfs_optional_times.append(dfs_end_time - dfs_restart_time)
-            ebm_times.append(ebm_end_time - ebm_start_time)
+                # update ema_model
+                for p, ema_p in zip(dfs_model.parameters(), ema_dfs_model.parameters()):
+                    ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
+
+            dfs_end_time = time.time()
+            dfs_times.append(dfs_end_time - dfs_start_time)
+
             
+            # update ema_model
+            for p, ema_p in zip(ebm_model.parameters(), ema_ebm_model.parameters()):
+                ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
+
 
             if verbose:
-                pbar.set_description(f'EBM loss: {ebm_loss.item()} ({ebm_data_loss.item(), ebm_dfs_loss.item()}), DFS loss: {dfs_loss.item()} avg dfs time: {sum(dfs_times)/(it+1)} avg dfs optional time: {sum(dfs_optional_times)/(it+1)} \n avg ebm step time: {sum(ebm_times)/(it+1)}, mean logp_real was {logp_real.mean()}, mean logp_fake was {logp_fake.mean()}')
+                pbar.set_description(f'dfs loss: {dfs_loss.item()}; ebm loss {ebm_loss.item()}; success rate {success_rate}; t: {t_target}; avg dfs step time: {sum(dfs_times)/(itr+1)}; avg ebm step time: {sum(ebm_times)/(itr+1)}; acc: {acc};')
 
         if verbose:
-            print(f'Epoch: {epoch}\{args.num_epochs}; Final DFS Loss: {dfs_loss.item()}; EBM Loss: {ebm_loss.item()}; mean logp_real: {logp_real.mean().item()}; mean logp_fake: {logp_fake.mean().item()}; \n')
+            print(f'Epoch: {epoch}\{args.num_epochs}; Final DFS Loss: {dfs_loss}; EBM Loss: {ebm_loss}; mean logp_real: {logp_real.mean().item()}; mean logp_fake: {logp_fake.mean().item()}; t: {t} \n')
 
-            
 
         if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs):
             eval_start_time = time.time()
@@ -341,14 +368,10 @@ def main_loop_real(args, verbose=False):
                 plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
             else:
                 xt = None
-            samples = gen_samples(dfs_model, args, batch_size=100, xt=xt)
+            samples = gen_samples(dfs_model, args, batch_size=100, xt=xt) 
             plot(f'{args.sample_path}/dfs_samples_{epoch}.png', torch.tensor(samples).float())
             samples = gen_samples(ema_dfs_model, args, batch_size=100, xt=xt)
             plot(f'{args.sample_path}/ema_dfs_samples_{epoch}.png', torch.tensor(samples).float())
-            if args.optional_step:
-                weights_dir = f'{args.plot_path}/weights_histogram_{epoch}.png'
-                if not os.path.exists(weights_dir):
-                    plot_weight_histogram(weights, output_dir=weights_dir)
 
             #save ebm samples
             EBM_samples = init_dist.sample((100,))
@@ -364,9 +387,7 @@ def main_loop_real(args, verbose=False):
             log_entry = {'epoch':None,'timestamp':None}
             log_entry['dfs_loss'] = dfs_loss.item()
             log_entry['ebm_loss'] = ebm_loss.item()
-            if args.optional_step:
-                log_entry['temp'] = temp
-                log_entry['mean_weight'] = weights.mean().item()
+            log_entry['success rate'] = success_rate
 
             timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
 
@@ -386,8 +407,7 @@ def main_loop_real(args, verbose=False):
                                                                             args.test_batch_size)
                 log_entry['dfs_loss'] = dfs_loss.item()
                 log_entry['ebm_loss'] = ebm_loss.item()
-                log_entry['temp'] = temp
-                log_entry['mean_weight'] = weights.mean().item()
+                log_entry['success rate'] = success_rate
                 log_entry['EMA Train log-likelihood'] = train_ll.item()
                 log_entry['EMA Train log-likelihood'] = val_ll.item()
                 log_entry['EMA Test log-likelihood'] = test_ll.item()
@@ -406,18 +426,27 @@ def main_loop_real(args, verbose=False):
 
                 log(args, log_entry, epoch, timestamp, log_path=f'{args.save_dir}/{args.dataset_name}_{args.exp_n}/eval_log.csv')
 
+
 def main_loop_toy(args, verbose=False):
-    assert not args.enable_backward, 'Backwards sampling not implemented for toy data.'
-
-
-    gen_samples = make_sampler(args)
-    compute_loss = make_loss(args)
-    compute_eloss = make_eloss(args)
-
 
     # load data
     db = get_db(args)
     plot = lambda p, x: toy_plot(p, x, args)
+
+    gen_samples = make_sampler(args)
+    gen_back_samples = make_back_sampler(args)
+    compute_loss = make_loss(args)
+    compute_eloss = make_eloss(args)
+
+    def preprocess(data):
+        if args.dynamic_binarization:
+            return torch.bernoulli(data)
+        else:
+            return data
+    
+    def get_independent_sample(loader, args=args):
+        (x, _) = next(iter(loader))
+        return preprocess(x)
 
     if args.q == 'data_mean':
         samples = get_batch_data(db, args, batch_size=10000)
@@ -452,19 +481,19 @@ def main_loop_toy(args, verbose=False):
     #gibbs sampler for producing samples from EBM
     gibbs_sampler = GibbsSampler(n_choices = args.vocab_size, discrete_dim=args.discrete_dim, device=args.device)
 
-
     # move to cuda
     ebm_model.to(args.device)
     ema_ebm_model.to(args.device)
     dfs_model.to(args.device)
     ema_dfs_model.to(args.device)
 
-    #set temperature
-    temp = args.start_temp
-
     best_val_ll = np.inf
     dfs_lr = args.lr
     ebm_lr = args.ebm_lr
+
+    test_ll_list = []
+
+    temp = args.start_temp
    
     start_time = time.time()
     cum_eval_time = 0
@@ -508,10 +537,9 @@ def main_loop_toy(args, verbose=False):
     pbar = tqdm(range(1, args.num_epochs + 1)) if verbose else range(1,args.num_epochs + 1)
     for epoch in pbar:
         dfs_model.train()
-        ebm_model.train()
+        ebm_model.eval()
 
         dfs_times = []
-        dfs_optional_times = []
         ebm_times = []
 
         if epoch < args.warmup_iters:
@@ -519,106 +547,85 @@ def main_loop_toy(args, verbose=False):
             for param_group in ebm_optimizer.param_groups:
                 param_group['lr'] = ebm_lr
 
-        dfs_start_time = time.time()
-        
-        x = torch.from_numpy(get_batch_data(db, args)).to(args.device)  
-
-        if args.source == 'data':
-            xt = torch.from_numpy(get_batch_data(db, args)).to(args.device)  
-        else:
-            xt = get_x0(B,D,S,args)
-
-        if epoch == 0 or not args.recycle_dfs_sample: 
-            x_fake = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).detach()
-        
-        for i in range(args.dfs_per_ebm):
-            
-            if i == 0:
-                x1 = x.long() #learn on the datapoint that the ebm will learn on next...
-            else:
-                x1 =  torch.from_numpy(get_batch_data(db, args)).to(args.device)  
-
-            (B, D) = x1.shape
-            S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
-            t = torch.rand((B,)).to(args.device)
-
-            if args.source == 'data':
-                x0 =  torch.from_numpy(get_batch_data(db, args)).to(args.device)  
-            else:
-                x0 = get_x0(B,D,S,args)
-
-            dfs_loss, acc = compute_loss(dfs_model,B,D,S,t,x1,x0,args)
-
-            dfs_optimizer.zero_grad()
-            dfs_loss.backward()
-            dfs_optimizer.step()
-
-        # update ema_model
-        for p, ema_p in zip(dfs_model.parameters(), ema_dfs_model.parameters()):
-            ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
-        
-        if args.source == 'data':
-            xt = torch.from_numpy(get_batch_data(db, args)).to(args.device)  
-        else:
-            xt = get_x0(B,D,S,args)
-
-        x_dfs = torch.from_numpy(gen_samples(dfs_model, args, xt=xt)).to(args.device)
-        dfs_pause_time = time.time()
-
-        #ebm-data loss
         ebm_start_time = time.time()
+        x = torch.from_numpy(get_batch_data(db, args)).to(args.device)  
+        (B, D) = x.shape
+        S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+
+        if args.rand_t:
+            t_target = random.random()
+        elif args.lin_t:
+            t_target = 1 - min(1, epoch/args.warmup_baf)
+        elif args.t > 0:
+            t_target = args.t
+        else:
+            raise ValueError
+        save_inter = True if epoch % args.epoch_save == 0 else False
+        x_fake, success_rate, t_target = get_x_fake(B,D,S,t_target,gen_samples, gen_back_samples, x.long(), dfs_model, ebm_model, args, save_inter)            
+
         logp_real = -ebm_model(x.float()).squeeze()
         if args.p_control > 0:
             grad_ld = torch.autograd.grad(logp_real.sum(), x,
                                             create_graph=True)[0].flatten(start_dim=1).norm(2, 1)
-            grad_reg_real = (grad_ld ** 2. / 2.).mean() * args.p_control
+            grad_reg = (grad_ld ** 2. / 2.).mean() * args.p_control
         else:
-            grad_reg_real = 0.0
+            grad_reg = 0.0
+
         logp_fake = -ebm_model(x_fake.float()).squeeze()
-        ebm_data_loss = -(logp_real.mean() - logp_fake.mean()) + grad_reg_real + args.l2 * ((logp_real ** 2.).mean() + (logp_fake ** 2.).mean())
 
-        #ebm-dfs loss
-        logp_dfs = -ebm_model(x_dfs.float()).squeeze()
-        if args.p_control > 0:
-            grad_ld = torch.autograd.grad(logp_dfs.sum(), x,
-                                            create_graph=True)[0].flatten(start_dim=1).norm(2, 1)
-            grad_reg_dfs = (grad_ld ** 2. / 2.).mean() * args.p_control
-        else:
-            grad_reg_dfs = 0.0
-        ebm_dfs_loss = -(logp_dfs.mean() - logp_fake.mean()) + grad_reg_dfs + args.l2 * ((logp_dfs ** 2.).mean() + (logp_fake ** 2.).mean())
-
-        ebm_loss = args.alpha * ebm_data_loss + (1 - args.alpha) * ebm_dfs_loss
+        obj = logp_real.mean() - logp_fake.mean()
+        ebm_loss = -obj + grad_reg + args.l2 * ((logp_real ** 2.).mean() + (logp_fake ** 2.).mean())
 
         ebm_optimizer.zero_grad()
         ebm_loss.backward()
         ebm_optimizer.step()
 
-        for p, ema_p in zip(ebm_model.parameters(), ema_ebm_model.parameters()):
-            ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
-            ebm_end_time = time.time()
-
         ebm_end_time = time.time()
+        ebm_times.append(ebm_end_time - ebm_start_time)
 
-        #without the optional step for now
-        dfs_restart_time = time.time()
-        if args.optional_step:
-            logp_dfs_old = logp_dfs
-            logp_dfs = -ebm_model(x_dfs.float()).squeeze()
+        dfs_start_time = time.time()
+        for i in range(args.dfs_per_ebm):
+            t = torch.rand((B,)).to(args.device)
 
-            dfs_loss, weights, temp = compute_eloss(dfs_model, B, D, S, logp_dfs, logp_dfs_old, t, x_dfs, x0, args, temp)
+            x = torch.from_numpy(get_batch_data(db, args)).to(args.device)  
+            
+            # restore_mh = args.with_mh
+            # args.with_mh = True
+            if args.rand_t:
+                t_target = random.random()
+            elif args.lin_t:
+                t_target = 1 - min(1, epoch/args.warmup_baf)
+            elif args.t > 0:
+                t_target = args.t
+            else:
+                raise ValueError
 
+            x1, _, _ = get_x_fake(B, D, S, t_target, gen_samples, gen_back_samples, x, dfs_model, ebm_model, args)
+
+            if args.source in ['data']:
+                x0 = torch.from_numpy(get_batch_data(db, args)).to(args.device)  
+            else:
+                x0 = get_x0(B,D,S,args)
+            
+            dfs_loss, acc = compute_loss(dfs_model, B, D, S, t, x1, x0, args) 
+            
             dfs_optimizer.zero_grad()
             dfs_loss.backward()
             dfs_optimizer.step()
-        dfs_end_time = time.time()
 
-        dfs_times.append(dfs_pause_time - dfs_start_time)
-        dfs_optional_times.append(dfs_end_time - dfs_restart_time)
-        ebm_times.append(ebm_end_time - ebm_start_time)
-        
+            # update ema_model
+            for p, ema_p in zip(dfs_model.parameters(), ema_dfs_model.parameters()):
+                ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
+
+        dfs_end_time = time.time()
+        dfs_times.append(dfs_end_time - dfs_start_time)
+
+        # update ema_model
+        for p, ema_p in zip(ebm_model.parameters(), ema_ebm_model.parameters()):
+            ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
+
         if verbose:
-            pbar.set_description(f'EBM loss: {ebm_loss.item()} ({ebm_data_loss.item(), ebm_dfs_loss.item()}), DFS loss: {dfs_loss.item()} avg dfs time: {sum(dfs_times)/(epoch)} avg dfs optional time: {sum(dfs_optional_times)/(epoch)} \n avg ebm step time: {sum(ebm_times)/(epoch)}, mean logp_real was {logp_real.mean()}, mean logp_fake was {logp_fake.mean()}')
-            
+            pbar.set_description(f'dfs loss: {dfs_loss.item()}; ebm loss {ebm_loss.item()}; success rate {success_rate}; t: {t_target}; avg dfs step time: {sum(dfs_times)/(epoch)}; avg ebm step time: {sum(ebm_times)/(epoch)}; acc: {acc}; \n mean logp_real: {logp_real.mean().item()}; mean logp_fake: {logp_fake.mean().item()}; t: {t} \n')
 
         if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs):
             eval_start_time = time.time()
@@ -633,14 +640,10 @@ def main_loop_toy(args, verbose=False):
                 plot(f'{args.sample_path}/source_{epoch}.png', xt)
             else:
                 xt = None
-            samples = gen_samples(dfs_model, args, batch_size = 2500, xt=xt)
+            samples = gen_samples(dfs_model, args, batch_size=100, xt=xt) 
             plot(f'{args.sample_path}/dfs_samples_{epoch}.png', torch.tensor(samples).float())
-            ema_samples = gen_samples(ema_dfs_model, args, batch_size = 2500, xt=xt)
-            plot(f'{args.sample_path}/ema_dfs_samples_{epoch}.png', torch.tensor(ema_samples).float())
-            if args.optional_step:
-                weights_dir = f'{args.plot_path}/weights_histogram_{epoch}.png'
-                if not os.path.exists(weights_dir):
-                    plot_weight_histogram(weights, output_dir=weights_dir)
+            samples = gen_samples(ema_dfs_model, args, batch_size=100, xt=xt)
+            plot(f'{args.sample_path}/ema_dfs_samples_{epoch}.png', torch.tensor(samples).float())
 
             #save ebm samples
             EBM_samples = gibbs_sampler(ebm_model, num_rounds=100, num_samples=2500).to('cpu').detach()
@@ -650,9 +653,7 @@ def main_loop_toy(args, verbose=False):
             log_entry = {'epoch':None,'timestamp':None}
             log_entry['dfs_loss'] = dfs_loss.item()
             log_entry['ebm_loss'] = ebm_loss.item()
-            if args.optional_step:
-                log_entry['temp'] = temp
-                log_entry['mean_weight'] = weights.mean().item()
+            log_entry['success rate'] = success_rate
 
             timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
 
@@ -672,10 +673,8 @@ def main_loop_toy(args, verbose=False):
                 log_entry = {'epoch':None,'timestamp':None}
                 log_entry['dfs_loss'] = dfs_loss.item()
                 log_entry['ebm_loss'] = ebm_loss.item()
-                if args.optional_step:
-                    log_entry['temp'] = temp
-                    log_entry['mean_weight'] = weights.mean().item()
-                    
+                log_entry['success_rate'] = success_rate
+
                 #compute mmds 1/2
                 hamming_mmd, bandwidth, euclidean_mmd, sigma = sampler_evaluation(args, db, dfs_model, gen_samples)
 

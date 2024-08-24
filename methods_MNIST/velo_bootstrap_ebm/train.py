@@ -428,7 +428,7 @@ def main_loop_toy(args, verbose=False):
     #set temperature
     temp = args.start_temp
 
-    best_val_ll = -np.inf
+    best_val_ll = np.inf
     dfs_lr = args.lr
     ebm_lr = args.ebm_lr
    
@@ -457,10 +457,10 @@ def main_loop_toy(args, verbose=False):
         dfs_loss.backward()
         dfs_optimizer.step()
 
-    # update ema_model
-    for p, ema_p in zip(dfs_model.parameters(), ema_dfs_model.parameters()):
-        ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
-    
+        # update ema_model
+        for p, ema_p in zip(dfs_model.parameters(), ema_dfs_model.parameters()):
+            ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
+        
     print(f'Warmup completed with dfs loss of {dfs_loss.item()} after {args.dfs_warmup_iter} iterations.')
     #save dfs samples
     if args.source == 'data':

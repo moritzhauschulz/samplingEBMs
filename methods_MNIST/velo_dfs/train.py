@@ -24,15 +24,9 @@ from utils.toy_data_lib import get_db
 
 from utils.model import ResNetFlow
 from utils.model import MLPModel
+from velo_dfm.train import gen_back_samples
 
-def gen_back_samples(model, args, xt, batch_size=None, t=0.0, print_stats=True):
-    assert args.enable_backward, 'Model has to have backward sampling enabled.'
-    # assert args.source in ['data', 'omniglot'], 'Source has to be data or omniglot.'
-
-    S = args.vocab_size
-    D = args.discrete_dim
-    B = xt.shape[0]
-    t = 1.0  # Initial time
+def make_backward_step_probs(B,D,S,t,xt,model,args):
 
     dt = args.delta_t #adaptive t not yet implemented
     while t > 0.0:
@@ -53,108 +47,142 @@ def gen_back_samples(model, args, xt, batch_size=None, t=0.0, print_stats=True):
             step_probs.scatter_(-1, xt[:, :, None], 0.0)
             step_probs.scatter_(-1, xt[:, :, None], (1.0 - step_probs.sum(dim=-1, keepdim=True))) 
 
-        t -= dt
-
         step_probs = step_probs.clamp(min=0) #can I avoid this?
 
-        xt = Categorical(step_probs).sample() #(B,D)
+    return step_probs, dt
 
-    return xt.detach().cpu().numpy()
+def gen_back_samples(model, args, xt, batch_size=None, t=1.0, t_target = 0.0, print_stats=True,return_logp=False):
+    assert args.enable_backward, 'Model has to have backward sampling enabled.'
 
+    S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
+    D = args.discrete_dim
+    B = xt.shape[0]
 
-def gen_samples(model, args, batch_size=None, t=0.0, xt=None, print_stats=True):
+    forward_log_probs = []
+    backward_log_probs = []
+
+    while t > t_target:
+        backward_step_probs, dt = make_backward_step_probs(B,D,S,t,xt,model,args)
+
+        backward_dist = Categorical(backward_step_probs)
+        xt_new = backward_dist.sample()
+        if return_logp:
+            backward_log_probs.append(backward_dist.log_prob(xt_new))
+            forward_step_probs, _ = make_forward_step_probs(B,D,S,t - dt,xt_new,model,args)
+            forward_dist = Categorical(forward_step_probs)
+            forward_log_probs.append(forward_dist.log_prob(xt))
+
+        t -= dt
+        xt = xt_new
+
+    if return_logp:
+        forward_logp = torch.sum(torch.stack(forward_log_probs, dim=1),dim=(1,2))
+        backward_logp = torch.sum(torch.stack(backward_log_probs, dim=1),dim=(1,2))
+        return xt.detach(), forward_logp, backward_logp 
+    else:
+        return xt.detach().cpu().numpy()
+
+def make_forward_step_probs(B,D,S,t,xt,model,args,print_stats=False):
+
+    delta_xt = torch.zeros((B,D,S)).to(args.device)
+    delta_xt = delta_xt.scatter_(-1, xt[:, :, None], 1.0) 
+    if args.scheduler_type == 'linear':
+
+        #adaptive dt
+        if t>0:
+            dt = min(args.delta_t, (1 - t))
+        else:
+            dt = args.delta_t
+    elif args.scheduler_type == 'quadratic':
+
+        #adaptive dt
+        if t>0:
+            dt = min(args.delta_t, (1 - t ** 2)/(2 * t))
+        else:
+            dt = args.delta_t
+    elif args.scheduler_type == 'quadratic_noise':
+        #adaptive dt 
+        if t>0:
+            dt = min(args.delta_t, 1 - t)
+        else:
+            dt = args.delta_t
+    elif args.scheduler_type == 'cubic':
+            #adaptive dt
+        if t>0 and t < 0.5:
+            dt = min(args.delta_t, (2 * t ** 3 - 3 * t ** 2 + 2 * t)/(6 * t ** 2 - 6 * t + 2))
+        else:
+            dt = min(args.delta_t, (1 - (2 * t ** 3 - 3 * t ** 2 + 2 * t))/(6 * t ** 2 - 6 * t + 2))
+
+    t_ = t * torch.ones((B,)).to(args.device)
+    with torch.no_grad():
+        ut, _, _ = model(xt, t_)
+
+    step_probs = delta_xt + (ut * dt)
+
+    if args.impute_self_connections:
+        step_probs = step_probs.clamp(max=1.0)
+        step_probs.scatter_(-1, xt[:, :, None], 0.0)
+        step_probs.scatter_(-1, xt[:, :, None], (1.0 - step_probs.sum(dim=-1, keepdim=True))) 
+
+    step_probs = step_probs.clamp(min=0) #can I avoid this?
+
+    if args.source == 'mask' and t >= 1 - dt:
+        if print_stats:
+            if torch.any(xt == M):
+                num_masked_entries = torch.sum(xt == M).item()
+                print(f"Share of masked entries (over all entries) in the final but one tensor: {num_masked_entries/ (B * D)}")
+                print(f"Forcing mask values into range...")
+            print(f'Share of samples with non-zero probability for at least one mask: {(step_probs[:,:,M].sum(dim=-1)>0.001).sum()/B}')
+        step_probs[:, :, M] = 0
+        step_probs_sum = step_probs.sum(dim=-1, keepdim=True)
+        zero_sum_mask = step_probs_sum == 0
+        if zero_sum_mask.any():
+            step_probs[zero_sum_mask.expand(-1, -1, S).bool() & (torch.arange(S).to(args.device) < M).unsqueeze(0).unsqueeze(0).expand(B, D, S)] = 1/M
+
+    return step_probs, dt
+
+def gen_samples(model, args, batch_size=None, t=0.0, t_target=1.0, xt=None, print_stats=True, return_logp=False):
     model.eval()
     S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
     D = args.discrete_dim
+    if args.source == 'mask':
+        M = S - 1
     if not xt is None:
         B = xt.shape[0]
     else:
         B = batch_size if batch_size is not None else args.batch_size
-
-    if args.source == 'mask':
-        M = S - 1
         
     # Initialize xt with the mask index value if not provided
     if xt is None:
         if args.source == 'mask':
             xt = M * torch.ones((B, D), dtype=torch.long).to(args.device)
-        else:
+        elif args.source == 'uniform':
             xt = torch.randint(0, S, (B, D)).to(args.device)
 
-    t = 0.0  # Initial time
+    forward_log_probs = []
+    backward_log_probs = []
 
-    while t < 1.0:
-        t_ = t * torch.ones((B,)).to(args.device)
-        delta_xt = torch.zeros((B,D,S)).to(args.device)
-        delta_xt = delta_xt.scatter_(-1, xt[:, :, None], 1.0) 
-        if args.scheduler_type == 'linear':
+    while t < t_target:
+        forward_step_probs, dt = make_forward_step_probs(B,D,S,t,xt,model,args)
 
-            #adaptive dt
-            if t>0:
-                dt = min(args.delta_t, (1 - t))
-            else:
-                dt = args.delta_t
-        elif args.scheduler_type == 'quadratic':
-
-            #adaptive dt
-            if t>0:
-                dt = min(args.delta_t, (1 - t ** 2)/(2 * t))
-            else:
-                dt = args.delta_t
-        elif args.scheduler_type == 'quadratic_noise':
-            #adaptive dt 
-            if t>0:
-                dt = min(args.delta_t, 1 - t)
-            else:
-                dt = args.delta_t
-        elif args.scheduler_type == 'cubic':
-                #adaptive dt
-            if t>0 and t < 0.5:
-                dt = min(args.delta_t, (2 * t ** 3 - 3 * t ** 2 + 2 * t)/(6 * t ** 2 - 6 * t + 2))
-            else:
-                dt = min(args.delta_t, (1 - (2 * t ** 3 - 3 * t ** 2 + 2 * t))/(6 * t ** 2 - 6 * t + 2))
-
-
-
-        t_ = t * torch.ones((B,)).to(args.device)
-        with torch.no_grad():
-            ut, _, _ = model(xt, t_)
-
-
-
-        step_probs = delta_xt + (ut * dt)
-
-        if args.impute_self_connections:
-            step_probs = step_probs.clamp(max=1.0)
-            step_probs.scatter_(-1, xt[:, :, None], 0.0)
-            step_probs.scatter_(-1, xt[:, :, None], (1.0 - step_probs.sum(dim=-1, keepdim=True))) 
-
+        forward_dist = Categorical(forward_step_probs)
+        xt_new = forward_dist.sample()
+        if return_logp:
+            forward_log_probs.append(forward_dist.log_prob(xt_new))
+            backward_step_probs, _ = make_backward_step_probs(B,D,S,t + dt,xt_new,model,args)
+            backward_dist = Categorical(backward_step_probs)
+            backward_log_probs.append(backward_dist.log_prob(xt))
+        
         t += dt
+        xt = xt_new
+    
+    if return_logp:
+        forward_logp = torch.sum(torch.stack(forward_log_probs, dim=1),dim=(1,2))
+        backward_logp = torch.sum(torch.stack(backward_log_probs, dim=1),dim=(1,2))
+        return xt.detach(), forward_logp, backward_logp 
+    else:
+        return xt.detach().cpu().numpy()
 
-        step_probs = step_probs.clamp(min=0)
-
-
-        if t < 1.0 or not args.source == 'mask':
-            xt = Categorical(step_probs).sample() #(B,D)
-        else:
-            if print_stats:
-                if torch.any(xt == M):
-                    num_masked_entries = torch.sum(xt == M).item()
-                    print(f"Share of masked entries (over all entries) in the final but one tensor: {num_masked_entries/ (B * D)}")
-                    print(f"Forcing mask values into range...")
-                print(f'Share of samples with non-zero probability for at least one mask: {(step_probs[:,:,M].sum(dim=-1)>0.001).sum()/B}')
-            step_probs[:, :, M] = 0
-            step_probs_sum = step_probs.sum(dim=-1, keepdim=True)
-            zero_sum_mask = step_probs_sum == 0
-            if zero_sum_mask.any():
-                step_probs[zero_sum_mask.expand(-1, -1, S).bool() & (torch.arange(S).to(args.device) < M).unsqueeze(0).unsqueeze(0).expand(B, D, S)] = 1/M
-            # print(step_probs[zero_sum_mask.expand(-1, -1, S)])
-            xt = Categorical(step_probs).sample() # (B, D)
-            if torch.any(xt == M):
-                num_masked_entries = torch.sum(xt == M).item()
-                print(f"Forcing failed. Number of masked entries in the final tensor: {num_masked_entries}")
-
-    return xt.detach().cpu().numpy()
 
 def compute_loss(model,B,D,S,t,x1,x0,args, weights=None):
 

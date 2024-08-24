@@ -27,6 +27,7 @@ from utils.model import ResNetFlow
 from utils.model import MLPModel
 
 def make_backward_step_probs(B,D,S,t,xt,model,args):
+    
     dt = args.delta_t #adaptive t not yet implemented
     delta_xt = torch.zeros((B,D,S)).to(args.device)
     delta_xt = delta_xt.scatter_(-1, xt[:, :, None], 1.0) 
