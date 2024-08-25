@@ -11,7 +11,7 @@ test.ipynb
 **.csv
 mmd_results
 **_output/
-methods_MNIST/model_graveyard/
+/model_graveyard/
 
 
 #env
