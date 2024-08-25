@@ -117,7 +117,7 @@ def get_args():
     #back and forth
     parser.add_argument("--rand_t", "--rt", type=int, default=0, choices=[0, 1])
     parser.add_argument("--lin_t", "--lt", type=int, default=0, choices=[0, 1])
-    parser.add_argument("--warmup_baf", "--wbaf", type=lambda x: int(float(x)), default=1, help="need to use w/ lin_t")
+    parser.add_argument("--warmup_baf", "--wbaf", type=lambda x: int(float(x)), default=5, help="need to use w/ lin_t")
     parser.add_argument("--t", type=float, default=-1.0, help="for gfn back forth negative sample generation")
     parser.add_argument("--with_mh", "--wm", type=int, default=1, choices=[0, 1])
 

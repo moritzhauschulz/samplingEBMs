@@ -72,6 +72,8 @@ def make_backward_step_probs(B,D,S,t,xt,model,args):
 
 def gen_back_samples(model, args, xt, batch_size=None, t=1.0, t_target = 0.0, print_stats=True,return_logp=False):
     assert args.enable_backward, 'Model has to have backward sampling enabled.'
+    assert t > t_target, 't and t_target mus not be equal'
+
 
     S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
     D = args.discrete_dim
@@ -178,6 +180,8 @@ def make_forward_step_probs(B,D,S,t,xt,model,args,print_stats=False):
 
 
 def gen_samples(model, args, batch_size=None, t=0.0, t_target=1.0, xt=None, print_stats=True, return_logp=False):
+    assert t < t_target, 't and t_target mus not be equal'
+
     model.eval()
     S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
     D = args.discrete_dim

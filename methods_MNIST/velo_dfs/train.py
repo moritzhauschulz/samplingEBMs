@@ -29,23 +29,22 @@ from velo_dfm.train import gen_back_samples
 def make_backward_step_probs(B,D,S,t,xt,model,args):
 
     dt = args.delta_t #adaptive t not yet implemented
-    while t > 0.0:
-        delta_xt = torch.zeros((B,D,S)).to(args.device)
-        delta_xt = delta_xt.scatter_(-1, xt[:, :, None], 1.0) 
-        
+    delta_xt = torch.zeros((B,D,S)).to(args.device)
+    delta_xt = delta_xt.scatter_(-1, xt[:, :, None], 1.0) 
+    
 
-        t_ = t * torch.ones((B,)).to(args.device)
-        with torch.no_grad():
-            _, ut_back, _ = model(xt, t_)
-
+    t_ = t * torch.ones((B,)).to(args.device)
+    with torch.no_grad():
+        _, ut_back, _ = model(xt, t_)
 
 
-        step_probs = delta_xt - (ut_back * dt)
 
-        if args.impute_self_connections:
-            step_probs = step_probs.clamp(max=1.0)
-            step_probs.scatter_(-1, xt[:, :, None], 0.0)
-            step_probs.scatter_(-1, xt[:, :, None], (1.0 - step_probs.sum(dim=-1, keepdim=True))) 
+    step_probs = delta_xt - (ut_back * dt)
+
+    if args.impute_self_connections:
+        step_probs = step_probs.clamp(max=1.0)
+        step_probs.scatter_(-1, xt[:, :, None], 0.0)
+        step_probs.scatter_(-1, xt[:, :, None], (1.0 - step_probs.sum(dim=-1, keepdim=True))) 
 
         step_probs = step_probs.clamp(min=0) #can I avoid this?
 
@@ -53,6 +52,7 @@ def make_backward_step_probs(B,D,S,t,xt,model,args):
 
 def gen_back_samples(model, args, xt, batch_size=None, t=1.0, t_target = 0.0, print_stats=True,return_logp=False):
     assert args.enable_backward, 'Model has to have backward sampling enabled.'
+    assert t > t_target, 't and t_target must not be equal'
 
     S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
     D = args.discrete_dim
@@ -142,6 +142,8 @@ def make_forward_step_probs(B,D,S,t,xt,model,args,print_stats=False):
     return step_probs, dt
 
 def gen_samples(model, args, batch_size=None, t=0.0, t_target=1.0, xt=None, print_stats=True, return_logp=False):
+    assert t < t_target, 't and t_target mus not be equal'
+
     model.eval()
     S = args.vocab_size_with_mask if args.source == 'mask' else args.vocab_size
     D = args.discrete_dim

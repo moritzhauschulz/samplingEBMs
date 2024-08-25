@@ -95,7 +95,7 @@ def main_loop(args, verbose=False):
         main_loop_real(args, verbose)
     log_completion(args.methods, args.dataset_name, args)
 
-def get_x_fake(B,D,S,t_target,sampler,back_sampler, x, dfs_model, ebm_model, args, save_inter = False):
+def get_x_fake(B,D,S,epoch,t_target,sampler,back_sampler, x, dfs_model, ebm_model, args, plot_fn, save_inter = False):
     x_turn, logp_to_x, logp_from_x = back_sampler(dfs_model, args, x, t_target = t_target,return_logp=True)
     x_prime, logp_to_x_prime, logp_from_x_prime = sampler(dfs_model, args, t = t_target, xt = x_turn, return_logp=True)
 
@@ -118,14 +118,11 @@ def get_x_fake(B,D,S,t_target,sampler,back_sampler, x, dfs_model, ebm_model, arg
         update_success_rate = None
 
     #debugging
-    if save_inter:
-        plot = lambda p, x: torchvision.utils.save_image(x.view(x.size(0),
-                                                            args.input_size[0], args.input_size[1], args.input_size[2]),
-                                                        p, normalize=True, nrow=int(x.size(0) ** .5))
-        plot(f'{args.sample_path}/x_turn_{epoch}.png', x_turn.float())
-        plot(f'{args.sample_path}/x_{epoch}.png', x.float())
-        plot(f'{args.sample_path}/x_prime_{epoch}.png', x_prime.float())
-        plot(f'{args.sample_path}/x_fake_{epoch}.png', x_fake.float())
+    if save_inter:          
+        plot_fn(f'{args.sample_path}/x_turn_{epoch}.png', x_turn.float())
+        plot_fn(f'{args.sample_path}/x_{epoch}.png', x.float())
+        plot_fn(f'{args.sample_path}/x_prime_{epoch}.png', x_prime.float())
+        plot_fn(f'{args.sample_path}/x_fake_{epoch}.png', x_fake.float())
 
     return x_fake.long(), update_success_rate, t_target
 
@@ -280,7 +277,7 @@ def main_loop_real(args, verbose=False):
             else:
                 raise ValueError
             save_inter = True if itr % 100 == 0 and epoch % args.epoch_save == 0 else False
-            x_fake, success_rate, t_target = get_x_fake(B,D,S,t_target,gen_samples, gen_back_samples, x.long(), dfs_model, ebm_model, args, save_inter)            
+            x_fake, success_rate, t_target = get_x_fake(B,D,S,epoch,t_target,gen_samples, gen_back_samples, x.long(), dfs_model, ebm_model, args,plot, save_inter)            
 
             logp_real = -ebm_model(x.float()).squeeze()
             if args.p_control > 0:
@@ -321,7 +318,7 @@ def main_loop_real(args, verbose=False):
                     t_target = args.t
                 else:
                     raise ValueError
-                x1, _, _ = get_x_fake(B, D, S, t_target, gen_samples, gen_back_samples, x, dfs_model, ebm_model, args)
+                x1, _, _ = get_x_fake(B,D,S,epoch, t_target, gen_samples, gen_back_samples, x, dfs_model, ebm_model, args,plot)
                 # args.with_mh = restore_mh
 
                 if args.source in ['data', 'omniglot']:
@@ -352,7 +349,7 @@ def main_loop_real(args, verbose=False):
                 pbar.set_description(f'dfs loss: {dfs_loss.item()}; ebm loss {ebm_loss.item()}; success rate {success_rate}; t: {t_target}; avg dfs step time: {sum(dfs_times)/(itr+1)}; avg ebm step time: {sum(ebm_times)/(itr+1)}; acc: {acc};')
 
         if verbose:
-            print(f'Epoch: {epoch}\{args.num_epochs}; Final DFS Loss: {dfs_loss}; EBM Loss: {ebm_loss}; mean logp_real: {logp_real.mean().item()}; mean logp_fake: {logp_fake.mean().item()}; t: {t} \n')
+            print(f'Epoch: {epoch}\{args.num_epochs}; Final DFS Loss: {dfs_loss.item()}; EBM Loss: {ebm_loss.item()}; mean logp_real: {logp_real.mean().item()}; mean logp_fake: {logp_fake.mean().item()}; t: {t} \n')
 
 
         if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs):
@@ -561,7 +558,7 @@ def main_loop_toy(args, verbose=False):
         else:
             raise ValueError
         save_inter = True if epoch % args.epoch_save == 0 else False
-        x_fake, success_rate, t_target = get_x_fake(B,D,S,t_target,gen_samples, gen_back_samples, x.long(), dfs_model, ebm_model, args, save_inter)            
+        x_fake, success_rate, t_target = get_x_fake(B,D,S,epoch,t_target,gen_samples, gen_back_samples, x.long(), dfs_model, ebm_model, args, plot, save_inter)            
 
         logp_real = -ebm_model(x.float()).squeeze()
         if args.p_control > 0:
@@ -600,7 +597,7 @@ def main_loop_toy(args, verbose=False):
             else:
                 raise ValueError
 
-            x1, _, _ = get_x_fake(B, D, S, t_target, gen_samples, gen_back_samples, x, dfs_model, ebm_model, args)
+            x1, _, _ = get_x_fake(B,D,S,epoch, t_target, gen_samples, gen_back_samples, x, dfs_model, ebm_model, args, plot)
 
             if args.source in ['data']:
                 x0 = torch.from_numpy(get_batch_data(db, args)).to(args.device)  
