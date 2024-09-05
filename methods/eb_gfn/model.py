@@ -595,6 +595,9 @@ def tb_mle_learnedpb_loss(ebm_model, gfn, batch_size, back_ratio=0., data=None):
         # forth_loss = 0.
         log_pb = 0.
         log_pf = 0.
+
+        # gfn_back_gen_start = time.time()
+
         for step in range(gfn.xdim + 1):
             logits = gfn.model(x)
             add_logits, del_logits = logits[:, :2 * gfn.xdim], logits[:, 2 * gfn.xdim:]
@@ -633,6 +636,8 @@ def tb_mle_learnedpb_loss(ebm_model, gfn, batch_size, back_ratio=0., data=None):
                 x = x.scatter(1, add_locs, add_values.float())
 
         assert torch.all(x != 0) if gfn.init_zero else torch.all(x >= 0)
+        # gfn_back_gen_end = time.time()
+        # print(f'gfn back gen took {gfn_back_gen_end-gfn_back_gen_start}')o
 
         score_value = ebm_model(x)
         if gfn.l1loss:
@@ -651,6 +656,8 @@ def tb_mle_learnedpb_loss(ebm_model, gfn, batch_size, back_ratio=0., data=None):
         x = data
         batch_size = x.size(0)
         data_log_pb = torch.zeros(batch_size).to(gfn.device)
+
+        # gfn_gen_start = time.time()
 
         for step in range(gfn.xdim + 1):
             logits = gfn.model(x)
@@ -681,6 +688,9 @@ def tb_mle_learnedpb_loss(ebm_model, gfn, batch_size, back_ratio=0., data=None):
 
                 del_values = torch.ones(batch_size, 1).to(gfn.device) * (0 if gfn.init_zero else -1)
                 x = x.scatter(1, del_locs, del_values)
+
+        # gfn_gen_end = time.time()
+        # print(f'gen time in loss comp was {gfn_gen_end - gfn_gen_start}')
 
         if gfn.l1loss:
             back_loss = F.smooth_l1_loss(gfn.logZ + mle_loss - data_log_pb - ebm_model(data).detach(), torch.zeros_like(mle_loss))

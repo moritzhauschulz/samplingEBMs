@@ -12,6 +12,7 @@ test.ipynb
 mmd_results
 **_output/
 /model_graveyard/
+/final_report_utils/
 
 
 #env

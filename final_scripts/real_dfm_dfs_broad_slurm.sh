@@ -37,40 +37,42 @@ counter=1
 
 ############# SPECIFY JOB BELOW ################
 
-# 2spirals dfs - already ran
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type linear --source mask --num_itr 200000 --eval_every 25000 --itr_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type linear --source uniform --num_itr 200000 --eval_every 25000  --itr_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type linear --source data --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+# 2spirals dfs
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type linear --source mask --num_itr 50000 --eval_every 10000 --itr_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type linear --source uniform --num_itr 50000 --eval_every 10000  --itr_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type linear --source data --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic --source mask --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic --source uniform --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic --source data --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic --source mask --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic --source uniform --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic --source data --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+wait
 
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source mask --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source uniform --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source data --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source mask --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source uniform --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type quadratic_noise --source data --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type cubic --source mask --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type cubic --source uniform --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type cubic --source data --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type cubic --source mask --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type cubic --source uniform --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfs --scheduler_type cubic --source data --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 wait 
 
 #2spirals dfm
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type linear --source mask --num_itr 200000 --eval_every 25000 --itr_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type linear --source uniform --num_itr 200000 --eval_every 25000  --itr_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type linear --source data --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type linear --source mask --num_itr 50000 --eval_every 10000 --itr_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type linear --source uniform --num_itr 50000 --eval_every 10000  --itr_save 5000 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type linear --source data --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic --source mask --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic --source uniform --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic --source data --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic --source mask --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic --source uniform --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic --source data --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+wait
 
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source mask --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source uniform --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source data --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source mask --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source uniform --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type quadratic_noise --source data --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type cubic --source mask --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type cubic --source uniform --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type cubic --source data --num_itr 200000 --eval_every 25000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type cubic --source mask --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type cubic --source uniform --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --batch_size 100 --dataset_name static_mnist --lr 0.0001 --delta_t 0.05 --methods velo_dfm --scheduler_type cubic --source data --num_itr 50000 --eval_every 10000 --itr_save 5000  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 wait
 
 ############# SPECIFY JOB ABOVE ################

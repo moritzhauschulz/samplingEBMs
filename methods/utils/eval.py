@@ -22,7 +22,7 @@ from utils.utils import ourbase2float
 
 from utils.sampler import GibbsSampler 
 
-def plot_weight_histogram(weights_tensor, output_dir=None, bins=1000, title='Histogram of Weights'):
+def plot_weight_histogram(weights_tensor, output_dir=None, bins=100, title='Histogram of Weights'):
     """
     Plots a histogram of the weights in the given tensor.
 
@@ -38,16 +38,16 @@ def plot_weight_histogram(weights_tensor, output_dir=None, bins=1000, title='His
     weights_np = weights_tensor.cpu().detach().numpy()
 
     # Plot the histogram
-    plt.hist(weights_np, bins=bins, range=(0, 1), alpha=0.75, color='blue', edgecolor='black')
+    plt.hist(weights_np, bins=bins, range=None, alpha=0.75, color='blue', edgecolor='black')
 
     # Set the title and labels
     plt.title(title)
     plt.xlabel('Weight')
     plt.ylabel('Frequency')
 
-    # Show the plot
+    # save the plot
     plt.savefig(output_dir)
-    plt.show()
+    plt.clf()
 
 def energy_source(x):
     return -torch.sum(torch.log((1 - 0.5) ** x * 0.5 ** (1-x)), dim=-1)
@@ -461,7 +461,7 @@ def ebm_evaluation(args, db, ebm, write_to_index=True, batch_size=4000, ais_samp
   nll_samples = get_batch_data(db, args, batch_size=batch_size)
   nll_samples = torch.from_numpy(np.float32(nll_samples)).to(args.device)
   with torch.no_grad():
-    nll = ebm(nll_samples) - log_Z
+    nll = ebm(nll_samples) + log_Z
   nll = torch.sum(nll) / batch_size
 
   #MDD
@@ -560,14 +560,14 @@ def sampler_ebm_evaluation(args, db, model, gen_samples, ebm_model, batch_size=4
   return hamming_mmd.item(), bandwidth.item(), euclidean_mmd.item(), sigma.item()
 
 
-def log(args, log_entry, epoch, timestamp, log_path=None):
+def log(args, log_entry, itr, timestamp, log_path=None):
   if log_path is None:
     log_path = args.log_path
-  log_entry['epoch'] = epoch
+  log_entry['itr'] = itr
   log_entry['timestamp'] = timestamp
   df_log_entry = pd.DataFrame([log_entry])
-  df_log_entry.to_csv(log_path, mode='a', header=not os.path.exists(args.log_path), index=False)
-  print(f'logged epoch {epoch} to log file')
+  df_log_entry.to_csv(log_path, mode='a', header=not os.path.exists(log_path), index=False)
+  print(f'logged itr {itr} to log file')
 
 def log_completion(method, data, args):
   lock_file_path = f"{args.index_path}.lock"

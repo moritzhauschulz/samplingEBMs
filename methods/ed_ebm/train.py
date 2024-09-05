@@ -10,8 +10,9 @@ from utils import utils
 from utils.eval import ebm_evaluation, log_completion, log
 from utils.toy_data_lib import get_db
 from utils import eval
-from ed_ebm.model import MLPScore, EBM
-from ed_ebm.ed_categorical import ed_categorical
+from utils.model import MLPScore, EBM
+# from ed_ebm.model import MLPScore, EBM
+# from ed_ebm.ed_categorical import ed_categorical
 
 def get_batch_data(db, args, batch_size=None):
     if batch_size is None:
@@ -32,8 +33,8 @@ def energy_discrepancy_bernoulli(energy_net, samples, epsilon=0.1, m_particles=3
     pert_data = (noise_dist.sample((bs * m_particles,)).view(bs, m_particles, dim) + beri.unsqueeze(1)) % 2.    # [bs, m_particles, dim]
     # print((samples.unsqueeze(1) - pert_data).abs().mean())
 
-    pos_energy = energy_net(samples)   # [bs]
-    neg_energy = energy_net(pert_data.view(-1, dim)).view(bs, -1)  # [bs, m_particles]
+    pos_energy = energy_net(samples)   # [bs] #changed sign
+    neg_energy = energy_net(pert_data.view(-1, dim)).view(bs, -1)  # [bs, m_particles] #changed sign
     val = pos_energy.view(bs, 1) - neg_energy
     if w_stable != 0:
         val = torch.cat([val, np.log(w_stable) * torch.ones_like(val[:, :1])], dim=-1)

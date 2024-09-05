@@ -1,13 +1,6 @@
 #!/bin/bash
 
-# Move to the parent directory
-cd ..
-
-
-#########################################################
-#SLURM HEADER START
-
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:teslaa40:1
 #SBATCH --mail-type=ALL # required to send email notifications
 #SBATCH --mail-user=meh23@ic.ac.uk # required to send email notifications - please replace <your_username> with your college login name or email address
 #SBATCH --output=/dev/null # Temporarily send output to /dev/null
@@ -18,6 +11,9 @@ JOB_BASE_NAME="${SLURM_JOB_NAME%.sh}"
 # Ensure correct PATH to your virtual environment
 export PATH=/vol/bitbucket/${USER}/samplingEBMs/.venv/bin:$PATH
 source /vol/bitbucket/${USER}/samplingEBMs/.venv/bin/activate
+
+# Move to the parent directory
+cd ..
 
 CURRENT_DATE=$(date +"%Y%m%d_%H%M%S")
 
@@ -32,29 +28,16 @@ exec >"${output_date}/${JOB_BASE_NAME}_${SLURM_JOB_ID}.out" 2>"${output_date}/${
 echo "Starting job ${JOB_BASE_NAME} with ID $SLURM_JOB_ID"
 echo "Job started at $(date)"
 
-#SLURM HEADER END
-#########################################################
+# Initialize the counter
+counter=1
 
-python -u pcd_ebm_ema.py \
-    --dataset_name dynamic_mnist \
-    --sampler dmala \
-    --step_size 0.1 \
-    --sampling_steps 40 \
-    --viz_every 100 \
-    --model resnet-64 \
-    --print_every 10 \
-    --lr .0001 \
-    --warmup_iters 10000 \
-    --buffer_size 10000 \
-    --n_iters 50000 \
-    --buffer_init mean \
-    --base_dist \
-    --reinit_freq 0.0 \
-    --eval_every 5000 \
-    --eval_sampling_steps 10000 \
-    --save_dir ./figs/ebm_dynamic_mnist \
-    > ${output_date}/output.log;
+############# SPECIFY JOB BELOW ################
 
+
+python -u methods/main.py --methods gfn --dataset_name static_mnist --ebm_lr 1e-4 --type tblb --hid_layer 3 --hid 256 --glr 1e-3 --zlr 1 --rand_coef 0 --back_ratio 0.5 --lin_k 1 --warmup_baf 150 --num_epochs 1 --epoch_save 5 --eval_every 1 --with_mh 1 --print_every 10 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+wait
+
+############# SPECIFY JOB ABOVE ################
 echo "Job finished at $(date)"
 
 uptime

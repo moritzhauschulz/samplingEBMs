@@ -22,13 +22,13 @@ def load_static_mnist(args, return_datasets=False, **kwargs):
     # start processing
     def lines_to_np_array(lines):
         return np.array([[int(i) for i in line.split()] for line in lines])
-    with open(os.path.join('methods_MNIST/datasets', 'MNIST_static', 'binarized_mnist_train.amat')) as f:
+    with open(os.path.join('methods/datasets', 'MNIST_static', 'binarized_mnist_train.amat')) as f:
         lines = f.readlines()
     x_train = lines_to_np_array(lines).astype('float32')
-    with open(os.path.join('methods_MNIST/datasets', 'MNIST_static', 'binarized_mnist_valid.amat')) as f:
+    with open(os.path.join('methods/datasets', 'MNIST_static', 'binarized_mnist_valid.amat')) as f:
         lines = f.readlines()
     x_val = lines_to_np_array(lines).astype('float32')
-    with open(os.path.join('methods_MNIST/datasets', 'MNIST_static', 'binarized_mnist_test.amat')) as f:
+    with open(os.path.join('methods/datasets', 'MNIST_static', 'binarized_mnist_test.amat')) as f:
         lines = f.readlines()
     x_test = lines_to_np_array(lines).astype('float32')
 
@@ -72,13 +72,13 @@ def load_dynamic_mnist(args, return_datasets=False, **kwargs):
 
     # start processing
     from torchvision import datasets, transforms
-    train_loader = torch.utils.data.DataLoader( datasets.MNIST('/home/zo122/datasets', train=True, download=True,
+    train_loader = torch.utils.data.DataLoader( datasets.MNIST('methods/datasets', train=True, download=True,
                                                                transform=transforms.Compose([
                                                                    transforms.ToTensor()
                                                                ])),
                                                 batch_size=args.batch_size, shuffle=True)
 
-    test_loader = torch.utils.data.DataLoader( datasets.MNIST('/home/zo122/datasets', train=False,
+    test_loader = torch.utils.data.DataLoader( datasets.MNIST('methods/datasets', train=False,
                                                               transform=transforms.Compose([transforms.ToTensor()
                                                                         ])),
                                                batch_size=args.batch_size, shuffle=True)
@@ -142,7 +142,7 @@ def load_omniglot(args, n_validation=1345, **kwargs):
     # start processing
     def reshape_data(data):
         return data.reshape((-1, 28, 28)).reshape((-1, 28*28), order='F')
-    omni_raw = loadmat(os.path.join('methods_MNIST/datasets', 'OMNIGLOT', 'chardata.mat'))
+    omni_raw = loadmat(os.path.join('methods/datasets', 'OMNIGLOT', 'chardata.mat'))
 
     # train and test data
     train_data = reshape_data(omni_raw['data'].T.astype('float32'))
@@ -200,7 +200,7 @@ def load_caltech101silhouettes(args, **kwargs):
     # start processing
     def reshape_data(data):
         return data.reshape((-1, 28, 28)).reshape((-1, 28*28), order='F')
-    caltech_raw = loadmat(os.path.join('/home/zo122/datasets', 'Caltech101Silhouettes', 'caltech101_silhouettes_28_split1.mat'))
+    caltech_raw = loadmat(os.path.join('methods/datasets', 'Caltech101Silhouettes', 'caltech101_silhouettes_28_split1.mat'))
 
     # train, validation and test data
     x_train = 1. - reshape_data(caltech_raw['train_data'].astype('float32'))

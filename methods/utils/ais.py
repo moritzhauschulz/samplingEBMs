@@ -11,9 +11,9 @@ class AISModel(nn.Module):
         self.init_dist = init_dist
 
     def forward(self, x, beta):
-        logpx = - self.model(x).squeeze() #assuming EBM produces f(x), so logp is -f(x)
+        logpx = self.model(x).squeeze() #assuming EBM produces f(x), so logp is -f(x)
         logpi = self.init_dist.log_prob(x).sum(-1)
-        return logpx * beta + logpi * (1. - beta)
+        return logpx * beta - logpi * (1. - beta) #we swap the signs
 
 
 def evaluate(model, init_dist, sampler,
@@ -41,9 +41,9 @@ def evaluate(model, init_dist, sampler,
 
         # udpate importance weights
         with torch.no_grad():
-            log_w = log_w + model(samples, beta_k) - model(samples, beta_km1)
+            log_w = log_w + -model(samples, beta_k) - (-model(samples, beta_km1))
         # update samples
-        model_k = lambda x: model(x, beta=beta_k)
+        model_k = lambda x: -model(x, beta=beta_k) #we swap the signs
         for d in range(steps_per_iter):
             samples = sampler.step(samples.detach(), model_k).detach()
 
@@ -58,7 +58,7 @@ def evaluate(model, init_dist, sampler,
     logps = []
     for x, _ in train_loader:
         x = preprocess(x.to(device))
-        logp_x = model(x).squeeze().detach()
+        logp_x = -model(x).squeeze().detach()
         logps.append(logp_x)
 
     logps = torch.cat(logps)
@@ -67,7 +67,7 @@ def evaluate(model, init_dist, sampler,
     logps = []
     for x, _ in val_loader:
         x = preprocess(x.to(device))
-        logp_x = model(x).squeeze().detach()
+        logp_x = -model(x).squeeze().detach()
         logps.append(logp_x)
 
     logps = torch.cat(logps)
@@ -76,9 +76,26 @@ def evaluate(model, init_dist, sampler,
     logps = []
     for x, _ in test_loader:
         x = preprocess(x.to(device))
-        logp_x = model(x).squeeze().detach()
+        logp_x = -model(x).squeeze().detach()
         logps.append(logp_x)
 
     logps = torch.cat(logps)
     test_ll = logps.mean() - logZ_final
     return logZ_final, train_ll, val_ll, test_ll, gen_samples
+
+def evaluate_sampler(args,ebm_model,
+             sampler_batches):
+
+    if args.logZ is None:
+        print('Sampler evaluation failed due to missing logZ. Make sure logZ on pretrained model is computed and specified in main.')
+        sample_ll = None
+    else:
+        logps = []
+        for x in sampler_batches:
+            logp_x = -ebm_model(x).squeeze().detach()
+            logps.append(logp_x)
+
+        logps = torch.cat(logps)
+        sample_ll = (logps.mean() - args.logZ).item()
+
+    return sample_ll

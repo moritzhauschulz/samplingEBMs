@@ -12,24 +12,15 @@ import utils.utils as utils
 
 from eb_gfn.train import main_loop as eb_gfn_main_loop
 from gfn.train import main_loop as gfn_main_loop
-from runidb.train import main_loop as runidb_main_loop #remove?
-from punidb.train import main_loop as punidb_main_loop #remove?
 from ed_ebm.train import main_loop as ed_ebm_main_loop
-from runidb.train import main_loop as runidb_main_loop
-from punidb.train import main_loop as punidb_main_loop
 from velo_dfm.train import main_loop as velo_dfm_main_loop
 from velo_dfs.train import main_loop as velo_dfs_main_loop
 from velo_edfm.train import main_loop as velo_edfm_main_loop
 from velo_edfs.train import main_loop as velo_edfs_main_loop
-# from velo_edfm_ebm.train import main_loop as velo_edfm_ebm_main_loop
 from velo_ebm.train import main_loop as velo_ebm_main_loop
 from velo_bootstrap_ebm.train import main_loop as velo_bootstrap_ebm_main_loop
 from velo_bootstrap_v2_ebm.train import main_loop as velo_bootstrap_v2_ebm_main_loop
-
-
 from velo_baf_ebm.train import main_loop as velo_baf_ebm_main_loop
-from velo_dfm_baf_ebm.train import main_loop as velo_dfm_baf_ebm_main_loop
-from dfm_baf_ebm_dula.train import main_loop as dfm_baf_ebm_dula_main_loop
 
 
 # from velo_edfm_ebm_bootstrap.train import main_loop as velo_edfm_ebm_bootstrap_main_loop
@@ -38,15 +29,13 @@ from dfm_baf_ebm_dula.train import main_loop as dfm_baf_ebm_dula_main_loop
 def get_args():
     parser = argparse.ArgumentParser(description='Pipeline')
 
-    parser.add_argument('--methods', type=str, default='punidb', 
+    parser.add_argument('--methods', type=str, default='velo_dfm', 
         choices=[
             'eb_gfn', 'gfn', 'ed_ebm',
-            'punidb', 'runidb','velo_dfm',
-            'velo_dfs', 'velo_edfm', 
-            'velo_edfs', 'velo_edfm_ebm', 'velo_bootstrap_ebm', 
+            'velo_dfm','velo_dfs', 'velo_edfm', 
+            'velo_edfs','velo_ebm', 'velo_bootstrap_ebm', 
             'velo_bootstrap_v2_ebm',
-            'velo_efm_ebm_bootstrap', 'velo_efm_ebm_bootstrap_2',
-            'velo_dfm_baf_ebm','velo_baf_ebm', 'dfm_baf_ebm_dula', 'velo_ebm', 
+            'velo_baf_ebm',
         ],
     )
 
@@ -56,10 +45,12 @@ def get_args():
     parser.add_argument('--vocab_size', type=int, default=2)
 
     #ebm related
+    parser.add_argument('--ebm_init_mean', type=int, default=0, choices=[0,1])
     parser.add_argument('--ebm_model', type=str, default='resnet-64')
     parser.add_argument('--checkpoint', type=str, default=None)
     parser.add_argument('--pretrained_ebm', type=str, default='auto')
     parser.add_argument('--p_control', type=float, default=0.0)
+    parser.add_argument('--gradnorm', "--gn", type=float, default=0.0)
     parser.add_argument('--l2', type=float, default=0.0)
     parser.add_argument('--store_ebm_ema', type=int, default=1, choices=[0,1])
     parser.add_argument('--warmup_iters', type=int, default=0) #10000
@@ -70,7 +61,7 @@ def get_args():
     parser.add_argument('--MCMC_refinement', type=int, default=0)
     parser.add_argument('--use_MCMC', type=int, default=0, choices=[0,1])
     parser.add_argument('--use_buffer', type=int, default=0, choices=[0,1])
-    parser.add_argument('--sampler', type=str, default='dula')
+    parser.add_argument('--sampler', type=str, default='dmala')
     parser.add_argument('--seed', type=int, default=1234567)
     parser.add_argument('--sampling_steps', type=int, default=40)
     parser.add_argument('--reinit_freq', type=float, default=0.0)
@@ -81,6 +72,8 @@ def get_args():
 
     #dfm/dfs related
     parser.add_argument('--dfs', type=int, choices=[0,1]) #only applies if the method is specified jointly for dfs/dfm (e.g. velo_ebm)
+    parser.add_argument('--use_ema_dfs', type=int, default=0, choices=[0,1]) #only applies if the method is specified jointly for dfs/dfm (e.g. velo_ebm)
+
     parser.add_argument('--enable_backward', type=int, default=0, choices=[0,1])
     parser.add_argument('--lr', type=float, default=.0001)
     parser.add_argument('--scheduler_type', type=str, default='linear', choices=['cubic','quadratic', 'quadratic_noise', 'linear'])
@@ -94,8 +87,8 @@ def get_args():
     parser.add_argument('--delta_t', type=float, default=0.05)
     parser.add_argument('--impute_self_connections', type=int, default=1, choices=[0,1])
     parser.add_argument('--loss_weight', type=int, default=1, choices=[0,1])
-    parser.add_argument('--norm_by_sum', type=int, default=0, choices=[0,1])
-    parser.add_argument('--norm_by_max', type=int, default=1, choices=[0,1])
+    parser.add_argument('--norm_by_mean', type=int, default=1, choices=[0,1])
+    parser.add_argument('--norm_by_max', type=int, default=0, choices=[0,1])
     parser.add_argument('--q_weight', type=float, default=0.0) #remove?
     parser.add_argument('--weight_decay', type=float, default=.0)
     parser.add_argument('--dfs_init_from_checkpoint', type=int, default=1, choices=[0,1])
@@ -119,17 +112,20 @@ def get_args():
     parser.add_argument("--lin_t", "--lt", type=int, default=0, choices=[0, 1])
     parser.add_argument("--warmup_baf", "--wbaf", type=lambda x: int(float(x)), default=5, help="need to use w/ lin_t")
     parser.add_argument("--t", type=float, default=-1.0, help="for gfn back forth negative sample generation")
-    parser.add_argument("--with_mh", "--wm", type=int, default=1, choices=[0, 1])
+    parser.add_argument("--ebm_with_mh", "--ewm", type=int, default=1, choices=[0, 1])
+    parser.add_argument("--dfs_with_mh", "--dwm", type=int, default=1, choices=[0, 1])
 
 
 
     #gfn related
+    parser.add_argument("--down_sample", "--ds", default=0, type=int, choices=[0, 1])
+    parser.add_argument('--ebm_every', "--ee", type=int, default=1)
     parser.add_argument('--print_every', "--pe", type=int, default=100)
     parser.add_argument('--plot_every', type=int, default=2500)
-    parser.add_argument("--gfn_iter_per_epoch", type=int, default=1, help="GFN training frequency")
-    parser.add_argument("--ebm_iter_per_epoch", type=int, default=1, help="EBM training frequency")
+    parser.add_argument("--gfn_per_itr", type=int, default=1, help="GFN training frequency")
+    parser.add_argument("--ebm_per_itr", type=int, default=1, help="EBM training frequency")
 
-    parser.add_argument("--type", type=str)
+    parser.add_argument("--type", type=str, default='tblb')
     parser.add_argument("--hid", type=int, default=512)
     parser.add_argument("--hid_layers", "--hl", type=int, default=3)
     parser.add_argument("--leaky", type=int, default=1, choices=[0, 1])
@@ -139,8 +135,10 @@ def get_args():
     parser.add_argument("--train_steps", "--ts", type=int, default=1)
     parser.add_argument("--l1loss", "--l1l", type=int, default=0, choices=[0, 1], help="use soft l1 loss instead of l2")
 
-    parser.add_argument("--warmup_", "--wk", type=lambda x: int(float(x)), default=0, help="need to use w/ lin_k")
-
+    parser.add_argument("--rand_k", "--rk", type=int, default=0, choices=[0, 1])
+    parser.add_argument("--lin_k", "--lk", type=int, default=0, choices=[0, 1])
+    parser.add_argument("--warmup_k", "--wk", type=lambda x: int(float(x)), default=5, help="need to use w/ lin_k")
+    parser.add_argument("--K", type=int, default=-1, help="for gfn back forth negative sample generation")
 
     parser.add_argument("--rand_coef", "--rc", type=float, default=0, help="for tb")
     parser.add_argument("--back_ratio", "--br", type=float, default=0.)
@@ -159,14 +157,12 @@ def get_args():
     parser.add_argument('--gpu', type=int, default=0, help='-1: cpu; 0 - ?: specific gpu index')
     parser.add_argument('--batch_size', default=128, type=int, help='batch size')
     parser.add_argument('--test_batch_size', type=int, default=128)
-    parser.add_argument('--num_epochs', default=200, type=int, help='num epochs')
-    parser.add_argument('--n_iters', "--ni", type=int, default=100000)
-    parser.add_argument('--epoch_save', default=1, type=int, help='num epochs between save')
-    parser.add_argument('--itr_save', default=0, type=int, help='num iters between save')
-    parser.add_argument('--eval_on', type=int, default=0, choices=[0,1])
+    parser.add_argument('--num_itr', default=200, type=int, help='num itr')
+    parser.add_argument('--itr_save', default=1, type=int, help='num itrs between save')
+    parser.add_argument('--eval_on', type=int, default=1, choices=[0,1])
     parser.add_argument('--eval_every', type=int, default=50)
 
-    parser.add_argument("--final_ais_samples", type=int, default=1000000)
+    parser.add_argument("--final_ais_samples", type=int, default=100000)
     parser.add_argument("--intermediate_ais_samples", type=int, default=10000)
     parser.add_argument("--final_ais_num_steps", type=int, default=1000)
     parser.add_argument("--intermediate_ais_num_steps", type=int, default=100)
@@ -195,9 +191,9 @@ def get_args():
     else:
         args.device = torch.device('cpu')
         print('use cpu')
-    args.save_dir = f'./methods_MNIST/{args.methods}/experiments/{args.dataset_name}' #change this
+    args.save_dir = f'./methods/{args.methods}/experiments/{args.dataset_name}' #change this
     os.makedirs(args.save_dir, exist_ok=True)
-    args.data_dir = f'./methods_MNIST/datasets' #change this
+    args.data_dir = f'./methods/datasets' 
     args.completed = False
     args.vocab_size_with_mask = args.vocab_size + 1
     start_time = datetime.datetime.now()
@@ -209,18 +205,43 @@ def get_args():
 
     #define standard pretrained ebms for toy
     toy_data_pretrained = {
-        'swissroll': './methods_MNIST/ed_ebm/experiments/swissroll/swissroll_1/ckpts/model_100000.pt',
-        'circles': './methods_MNIST/ed_ebm/experiments/circles/circles_1/ckpts/model_100000.pt',
-        'moons': './methods_MNIST/ed_ebm/experiments/moons/moons_1/ckpts/model_100000.pt',
-        '8gaussians': './methods_MNIST/ed_ebm/experiments/8gaussians/8gaussians_1/ckpts/model_100000.pt',
-        'pinwheel':'./methods_MNIST/ed_ebm/experiments/pinwheel/pinwheel_1/ckpts/model_100000.pt',
-        '2spirals':'./methods_MNIST/ed_ebm/experiments/2spirals/2spirals_1/ckpts/model_100000.pt',
-        'checkerboard':'./methods_MNIST/ed_ebm/experiments/checkerboard/checkerboard_1/ckpts/model_100000.pt'
+        'swissroll': './methods/ed_ebm/experiments/swissroll/swissroll_0/ckpts/model_100000.pt',
+        'circles': './methods/ed_ebm/experiments/circles/circles_0/ckpts/model_100000.pt',
+        'moons': './methods/ed_ebm/experiments/moons/moons_0/ckpts/model_100000.pt',
+        '8gaussians': './methods/ed_ebm/experiments/8gaussians/8gaussians_0/ckpts/model_100000.pt',
+        'pinwheel':'./methods/ed_ebm/experiments/pinwheel/pinwheel_0/ckpts/model_100000.pt',
+        '2spirals':'./methods/ed_ebm/experiments/2spirals/2spirals_0/ckpts/model_100000.pt',
+        'checkerboard':'./methods/ed_ebm/experiments/checkerboard/checkerboard_0/ckpts/model_100000.pt'
+    }
+    real_data_pretrained = {
+        'caltech': './methods/dmala_ebm/figs/ebm_caltech/best_ckpt_caltech_dmala_0.1.pt',
+        'dynamic_mnist': './methods/dmala_ebm/figs/ebm_dynamic_mnist/best_ckpt_dynamic_mnist_dmala_0.1.pt',
+        'omniglot': './methods/dmala_ebm/figs/ebm_omniglot/best_ckpt_omniglot_dmala_0.1.pt',
+        'static_mnist': './methods/dmala_ebm/figs/ebm_stati_MNIST/best_ckpt_static_mnist_dmala_0.1.pt',
     }
     if args.is_toy and args.pretrained_ebm == 'auto':
         args.pretrained_ebm = toy_data_pretrained[args.dataset_name]
+        args.input_size = [32]
+        args.input_type = "binary" 
     elif args.pretrained_ebm == 'auto':
-        args.pretrained_ebm = './methods_MNIST/dl_ebm/figs/ebm/ckpt_static_mnist_dula_0.1.pt'
+        args.input_size = [32]
+        args.input_type = "binary"
+        args.pretrained_ebm = real_data_pretrained[args.dataset_name]
+        #load normalizing constant for evaluation of samplers:
+        log_path = './methods/datasets/real_datasets_ais_stats.csv'
+        if os.path.exists(log_path):
+            df = pd.read_csv(log_path)
+            model_name = args.pretrained_ebm.split('/')[-1]
+            filtered_df = df[df['model_name'].str.contains(model_name, na=False)]
+            if not filtered_df.empty:
+                args.logZ = filtered_df['logZ'].values[0]
+                print(f"The logZ value for model '{model_name}' is: {args.logZ}")
+            else:
+                print(f"Caution: No logZ entries found for model '{model_name}' – any sampler evaluation will fail.")
+                args.logZ = None
+        else:
+            print(f"Caution: No file found for logZ – any sampler evaluation will fail.")
+            args.logZ = None
 
     return args
 

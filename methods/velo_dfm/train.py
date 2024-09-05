@@ -25,6 +25,10 @@ from utils.toy_data_lib import get_db
 
 from utils.model import ResNetFlow
 from utils.model import MLPModel
+import utils.mlp as mlp
+from utils.model import MLPModel, EBM
+from utils.ais import evaluate_sampler
+
 
 def make_backward_step_probs(B,D,S,t,xt,model,args):
     
@@ -307,6 +311,7 @@ def main_loop_real(args, verbose=False):
     else:
         source_train_loader = copy.deepcopy(train_loader)
 
+
     def preprocess(data, args=args):
         if args.dynamic_binarization:
             return torch.bernoulli(data)
@@ -316,6 +321,36 @@ def main_loop_real(args, verbose=False):
     def get_independent_sample(loader, args=args):
         (x, _) = next(iter(loader))
         return preprocess(x, args)
+
+    #load ebm for eval
+    if args.ebm_model.startswith("mlp-"):
+        nint = int(args.ebm_model.split('-')[1])
+        net = mlp.mlp_ebm(np.prod(args.input_size), nint)
+    elif args.ebm_model.startswith("resnet-"):
+        nint = int(args.ebm_model.split('-')[1])
+        net = mlp.ResNetEBM(nint)
+    elif args.ebm_model.startswith("cnn-"):
+        nint = int(args.ebm_model.split('-')[1])
+        net = mlp.MNISTConvNet(nint)
+    else:
+        raise ValueError("invalid ebm_model definition")
+
+    init_batch = []
+    for x, _ in train_loader:
+        init_batch.append(preprocess(x))
+    init_batch = torch.cat(init_batch, 0)
+    eps = 1e-2
+    init_mean = (init_batch.mean(0) * (1. - 2 * eps) + eps).to(args.device)
+
+    ebm_model = EBM(net, init_mean).to(args.device)
+    try:
+        d = torch.load(args.pretrained_ebm)
+        ebm_model.load_state_dict(d['ema_model'])
+        print(f'successfully loaded EBM...')
+    except FileNotFoundError as e:
+        print('Training on EBM requires a trained EBM model. Specify a model checkpoint to load as --pretrained_ebm and try again.')
+        sys.exit(1)
+    ebm_model.eval()
 
     # make model
     model = ResNetFlow(64, args)
@@ -329,11 +364,13 @@ def main_loop_real(args, verbose=False):
     start_time = time.time()
     cum_eval_time = 0
 
-    for epoch in range(1, args.num_epochs + 1):
+    itr = 1
+
+    while itr <= args.num_itr:
         model.train()
         pbar = tqdm(train_loader) if verbose else train_loader
 
-        for it, ((x, _), (x_source, _)) in enumerate(zip(pbar, cycle(source_train_loader))):
+        for _, ((x, _), (x_source, _)) in enumerate(zip(pbar, cycle(source_train_loader))):
 
             x, x_source = align_batchsize(x, x_source)
             
@@ -361,46 +398,67 @@ def main_loop_real(args, verbose=False):
                 ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
 
             if verbose:
-                pbar.set_description(f'Epoch {epoch} Iter {it} Loss {loss.item()}, Acc {acc}')
+                pbar.set_description(f' Iter {itr} Loss {loss.item()}, Acc {acc}')
 
-        if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs):
-            eval_start_time = time.time()
+            if (itr % args.itr_save == 0) or (itr == args.num_itr):
+                eval_start_time = time.time()
 
-            #save models
-            torch.save(model.state_dict(), f'{args.ckpt_path}/model_{epoch}.pt')
-            torch.save(ema_model.state_dict(), f'{args.ckpt_path}/ema_model_{epoch}.pt')
+                #save models
+                torch.save(model.state_dict(), f'{args.ckpt_path}/model_{itr}.pt')
+                torch.save(ema_model.state_dict(), f'{args.ckpt_path}/ema_model_{itr}.pt')
 
-            #save samples
-            if args.source == 'data':
-                xt = get_independent_sample(test_loader).long().to(args.device) 
-                plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
-            elif args.source == 'omniglot':
-                xt = get_independent_sample(og_test_loader, args=og_args).long().to(args.device) 
-                plot(f'{args.sample_path}/source_{epoch}.png', xt.float())
-            else:
-                xt = None
-            samples = gen_samples(model, args, batch_size=100, xt=xt)
-            plot(f'{args.sample_path}/samples_{epoch}.png', torch.tensor(samples).float())
-            ema_samples = gen_samples(ema_model, args, batch_size=100, xt=xt)
-            plot(f'{args.sample_path}/ema_samples_{epoch}.png', torch.tensor(ema_samples).float())
+                #save samples
+                if args.source == 'data':
+                    xt = get_independent_sample(test_loader).long().to(args.device) 
+                    plot(f'{args.sample_path}/source_{itr}.png', xt.float())
+                elif args.source == 'omniglot':
+                    xt = get_independent_sample(og_test_loader, args=og_args).long().to(args.device) 
+                    plot(f'{args.sample_path}/source_{itr}.png', xt.float())
+                else:
+                    xt = None
+                samples = gen_samples(model, args, batch_size=100, xt=xt)
+                plot(f'{args.sample_path}/samples_{itr}.png', torch.tensor(samples).float())
+                ema_samples = gen_samples(ema_model, args, batch_size=100, xt=xt)
+                plot(f'{args.sample_path}/ema_samples_{itr}.png', torch.tensor(ema_samples).float())
 
-            #backward samples
-            if args.enable_backward:
-                xt = get_independent_sample(test_loader).long().to(args.device) 
-                plot(f'{args.sample_path}/backward_source_{epoch}.png', xt.float())
+                #backward samples
+                if args.enable_backward:
+                    xt = get_independent_sample(test_loader).long().to(args.device) 
+                    plot(f'{args.sample_path}/backward_source_{itr}.png', xt.float())
 
-                samples = gen_back_samples(model, args, xt, batch_size=100)
-                plot(f'{args.sample_path}/backward_samples_{epoch}.png', torch.tensor(samples).float())
-                ema_samples = gen_back_samples(ema_model, args, xt, batch_size=100)
-                plot(f'{args.sample_path}/backward_ema_samples_{epoch}.png', torch.tensor(ema_samples).float())
+                    samples = gen_back_samples(model, args, xt, batch_size=100)
+                    plot(f'{args.sample_path}/backward_samples_{itr}.png', torch.tensor(samples).float())
+                    ema_samples = gen_back_samples(ema_model, args, xt, batch_size=100)
+                    plot(f'{args.sample_path}/backward_ema_samples_{itr}.png', torch.tensor(ema_samples).float())
 
-            #save log
-            log_entry = {'epoch':None,'timestamp':None}
-            log_entry['loss'] = loss.item()
-            log_entry['acc'] = acc
-            timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
+                #save log
+                log_entry = {'itr':None,'timestamp':None}
+                log_entry['loss'] = loss.item()
+                log_entry['acc'] = acc
+                timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
 
-            log(args, log_entry, epoch, timestamp)
+                log(args, log_entry, itr, timestamp)
+            
+            if (itr) % args.eval_every == 0 or (itr) == args.num_itr:
+                eval_start_time = time.time()
+                torch.save(model.state_dict(), f'{args.ckpt_path}model_{itr}.pt')
+                
+                log_entry = {'itr':None,'timestamp':None}
+                log_entry['loss'] = loss.item()
+
+                #sampler eval here 
+                batches = []
+                for i in range(10):
+                    samples = torch.from_numpy(gen_samples(model, args, batch_size=100, xt=xt)).to(args.device).float()
+                    batches.append(samples)
+                sample_ll = evaluate_sampler(args, ebm_model, batches)
+                log_entry['sample_ll'] = sample_ll
+                
+                timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
+
+                log(args, log_entry, itr, timestamp, log_path=f'{args.save_dir}/{args.dataset_name}_{args.exp_n}/eval_log.csv')
+            
+            itr += 1
 
 def main_loop_toy(args, verbose=False):
     assert not args.enable_backward, 'Backwards sampling not implemented for toy data.'
@@ -421,8 +479,8 @@ def main_loop_toy(args, verbose=False):
     start_time = time.time()
     cum_eval_time = 0
 
-    pbar = tqdm(range(1, args.num_epochs + 1)) if verbose else range(1,args.num_epochs + 1)
-    for epoch in pbar:
+    pbar = tqdm(range(1, args.num_itr + 1)) if verbose else range(1,args.num_itr + 1)
+    for itr in pbar:
         model.train()
 
         x1 = torch.from_numpy(get_batch_data(db, args)).to(args.device)          
@@ -448,40 +506,40 @@ def main_loop_toy(args, verbose=False):
             ema_p.data = ema_p.data * args.ema + p.data * (1. - args.ema)
 
         if verbose:
-            pbar.set_description(f'Epoch {epoch} Loss {loss.item()}, Acc {acc}')
+            pbar.set_description(f'itr {itr} Loss {loss.item()}, Acc {acc}')
 
-        if (epoch % args.epoch_save == 0) or (epoch == args.num_epochs):
+        if (itr % args.itr_save == 0) or (itr == args.num_itr):
             eval_start_time = time.time()
 
             #save samples
             if args.source == 'data':
                 xt = torch.from_numpy(get_batch_data(db, args, batch_size = 2500)).to(args.device)
-                plot(f'{args.sample_path}/source_{epoch}.png', xt)
+                plot(f'{args.sample_path}/source_{itr}.png', xt)
             else:
                 xt = None
             samples = gen_samples(model, args, batch_size = 2500, xt=xt)
-            plot(f'{args.sample_path}/samples_{epoch}.png', torch.tensor(samples).float())
+            plot(f'{args.sample_path}/samples_{itr}.png', torch.tensor(samples).float())
             ema_samples = gen_samples(ema_model, args, batch_size=2500, xt=xt)
-            plot(f'{args.sample_path}/ema_samples_{epoch}.png', torch.tensor(ema_samples).float())
+            plot(f'{args.sample_path}/ema_samples_{itr}.png', torch.tensor(ema_samples).float())
             #log
-            log_entry = {'epoch':None,'timestamp':None}
+            log_entry = {'itr':None,'timestamp':None}
             log_entry['loss'] = loss.item()
             
             timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
-            log(args, log_entry, epoch, timestamp)
+            log(args, log_entry, itr, timestamp)
         
-        if (epoch % args.eval_every == 0) or (epoch == args.num_epochs):
+        if (itr % args.eval_every == 0) or (itr == args.num_itr):
             eval_start_time = time.time()
 
             #save models
-            torch.save(model.state_dict(), f'{args.ckpt_path}/model_{epoch}.pt')
-            torch.save(ema_model.state_dict(), f'{args.ckpt_path}/ema_model_{epoch}.pt')
+            torch.save(model.state_dict(), f'{args.ckpt_path}/model_{itr}.pt')
+            torch.save(ema_model.state_dict(), f'{args.ckpt_path}/ema_model_{itr}.pt')
 
             #compute mmds
-            hamming_mmd, bandwidth, euclidean_mmd, sigma = sampler_evaluation(args, db, dfs_model, gen_samples)
+            hamming_mmd, bandwidth, euclidean_mmd, sigma = sampler_evaluation(args, db, model, gen_samples)
 
             #log
-            log_entry = {'epoch':None,'timestamp':None}
+            log_entry = {'itr':None,'timestamp':None}
             log_entry['sampler_hamming_mmd'], log_entry['sampler_bandwidth'] = hamming_mmd, bandwidth
             log_entry['sampler_euclidean_mmd'], log_entry['sampler_sigma'] = euclidean_mmd, sigma
 
@@ -489,4 +547,4 @@ def main_loop_toy(args, verbose=False):
             log_entry['loss'] = loss.item()
             log_entry['acc'] = loss.item()
             timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
-            log(args, log_entry, epoch, timestamp)
+            log(args, log_entry, itr, timestamp, log_path=f'{args.save_dir}/{args.dataset_name}_{args.exp_n}/eval_log.csv')

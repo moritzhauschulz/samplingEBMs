@@ -29,6 +29,46 @@ NONLINEARITIES = {
     "identity": Lambda(lambda x: x),
 }
 
+class EBM(nn.Module):
+    def __init__(self, net, mean=None):
+        super().__init__()
+        self.net = net
+        if mean is None:
+            self.mean = None
+        else:
+            self.mean = nn.Parameter(mean, requires_grad=False)
+
+    def update_mean(self, mean):
+        self.mean = nn.Parameter(mean, requires_grad=False)
+
+    def forward(self, x):
+        '''
+        we define p(x) = exp(-f(x)) / Z, the output of net is f(x)
+        '''
+        if self.mean is None:
+            bd = 0.
+        else:
+            base_dist = torch.distributions.Bernoulli(probs=self.mean)
+            bd = base_dist.log_prob((x > 0.5).float()).sum(-1)
+
+        logp = self.net(x).squeeze()
+        return logp - bd
+        
+class MLPScore(nn.Module):
+    def __init__(self, input_dim, hidden_dims, scale=1.0, nonlinearity='swish', act_last=None, bn=False, dropout=-1, bound=-1):
+        super(MLPScore, self).__init__()
+        self.scale = scale
+        self.bound = bound
+        self.mlp = MLP(input_dim, hidden_dims, nonlinearity, act_last, bn, dropout)
+
+    def forward(self, z):
+        raw_score = self.mlp(z.float() / self.scale)
+        if self.bound > 0:
+            raw_score = torch.clamp(raw_score, min=-self.bound, max=self.bound)
+        return raw_score
+
+
+
 class MLP(nn.Module):
     def __init__(self, input_dim, hidden_dims, nonlinearity='elu', act_last=None, bn=False, dropout=-1):
         super(MLP, self).__init__()
@@ -64,40 +104,3 @@ class MLP(nn.Module):
         x = self.main(z)
         return x
 
-class MLPScore(nn.Module):
-    def __init__(self, input_dim, hidden_dims, scale=1.0, nonlinearity='swish', act_last=None, bn=False, dropout=-1, bound=-1):
-        super(MLPScore, self).__init__()
-        self.scale = scale
-        self.bound = bound
-        self.mlp = MLP(input_dim, hidden_dims, nonlinearity, act_last, bn, dropout)
-
-    def forward(self, z):
-        raw_score = self.mlp(z.float() / self.scale)
-        if self.bound > 0:
-            raw_score = torch.clamp(raw_score, min=-self.bound, max=self.bound)
-        return raw_score
-
-class EBM(nn.Module):
-    def __init__(self, net, mean=None):
-        super().__init__()
-        self.net = net
-        if mean is None:
-            self.mean = None
-        else:
-            self.mean = nn.Parameter(mean, requires_grad=False)
-
-    def update_mean(self, mean):
-        self.mean = nn.Parameter(mean, requires_grad=False)
-
-    def forward(self, x):
-        '''
-        we define p(x) = exp(-f(x)) / Z, the output of net is f(x)
-        '''
-        if self.mean is None:
-            bd = 0.
-        else:
-            base_dist = torch.distributions.Bernoulli(probs=self.mean)
-            bd = base_dist.log_prob((x > 0.5).float()).sum(-1)
-
-        logp = self.net(x).squeeze()
-        return logp - bd
