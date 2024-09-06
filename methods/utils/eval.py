@@ -457,12 +457,15 @@ def rbf_mmd(x, y, args, sigma=None, log_path='toy_data_euclidean_dist_stats.csv'
 
 def ebm_evaluation(args, db, ebm, write_to_index=True, batch_size=4000, ais_samples=1000000, num_ais_mcmc_steps=25, ais_num_steps=1000):
   #NLL
-  log_Z = annealed_importance_sampling(args, ebm, ais_samples, ais_num_steps, num_ais_mcmc_steps, args.discrete_dim)
-  nll_samples = get_batch_data(db, args, batch_size=batch_size)
-  nll_samples = torch.from_numpy(np.float32(nll_samples)).to(args.device)
-  with torch.no_grad():
-    nll = ebm(nll_samples) + log_Z
-  nll = torch.sum(nll) / batch_size
+  if args.eval_nll:
+    log_Z = annealed_importance_sampling(args, ebm, ais_samples, ais_num_steps, num_ais_mcmc_steps, args.discrete_dim)
+    nll_samples = get_batch_data(db, args, batch_size=batch_size)
+    nll_samples = torch.from_numpy(np.float32(nll_samples)).to(args.device)
+    with torch.no_grad():
+      nll = ebm(nll_samples) + log_Z
+    nll = torch.sum(nll) / batch_size
+  else:
+    nll = torch.tensor(0)
 
   #MDD
   exp_hamming_mmd_list = []

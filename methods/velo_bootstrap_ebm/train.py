@@ -223,7 +223,7 @@ def main_loop_real(args, verbose=False):
                 else:
                     xt = get_x0(B,D,S,args)
                 dfs_samples = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).detach()
-                for j in range(args.MCMC_refinement):
+                for j in range(args.MCMC_refinement_dfs):
                     dfs_samples = sampler.step(dfs_samples.float(), ebm_model).detach()
                 dfs_samples_list.append(dfs_samples.long())
                 q_probs_list.append(-ebm_model(dfs_samples.float()).squeeze())
@@ -233,7 +233,7 @@ def main_loop_real(args, verbose=False):
             else:
                 xt = get_x0(B,D,S,args)
             x_fake = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).detach().float()
-            for j in range(args.MCMC_refinement):
+            for j in range(args.MCMC_refinement_ebm):
                 x_fake = sampler.step(x_fake, ebm_model).detach().float()
             dfs_pause_time = time.time()
 
@@ -502,7 +502,7 @@ def main_loop_toy(args, verbose=False):
 
             dfs_samples = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).float().detach()
             model = lambda x: -ebm_model(x)
-            for j in range(args.MCMC_refinement):
+            for j in range(args.MCMC_refinement_dfs):
                 dfs_samples = sampler.step(dfs_samples, model).detach()
             if len(sampler.a_s) > 0:
                 print(f'last acceptance prob: {sampler.a_s[-1]}')
@@ -516,7 +516,7 @@ def main_loop_toy(args, verbose=False):
 
         x_fake = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).float().detach()
         model = lambda x: -ebm_model(x)
-        for j in range(args.MCMC_refinement):
+        for j in range(args.MCMC_refinement_ebm):
             dfs_samples = sampler.step(x_fake, model).detach()
         dfs_pause_time = time.time()
 

@@ -59,6 +59,8 @@ def get_args():
     # mcmc
     parser.add_argument('--save_sampling_steps', type=int, default=5000)
     parser.add_argument('--MCMC_refinement', type=int, default=0)
+    parser.add_argument('--MCMC_refinement_ebm', type=int, default=0)
+    parser.add_argument('--MCMC_refinement_dfs', type=int, default=0)
     parser.add_argument('--use_MCMC', type=int, default=0, choices=[0,1])
     parser.add_argument('--use_buffer', type=int, default=0, choices=[0,1])
     parser.add_argument('--sampler', type=str, default='dmala')
@@ -160,6 +162,7 @@ def get_args():
     parser.add_argument('--num_itr', default=200, type=int, help='num itr')
     parser.add_argument('--itr_save', default=1, type=int, help='num itrs between save')
     parser.add_argument('--eval_on', type=int, default=1, choices=[0,1])
+    parser.add_argument('--eval_nll', type=int, default=1, choices=[0,1])
     parser.add_argument('--eval_every', type=int, default=50)
 
     parser.add_argument("--final_ais_samples", type=int, default=100000)
@@ -176,7 +179,7 @@ def get_args():
     args = parser.parse_args()
 
     #imputed args
-    args.model_has_noise = 1
+    args.model_has_noise = 0
     if args.methods in ['velo_dfm','velo_efm','velo_efm_ebm','velo_efm_ebm_bootstrap','velo_efm_ebm_bootstrap_2']:
         if args.scheduler_type == 'quadratic_noise':
             args.model_has_noise = 1
