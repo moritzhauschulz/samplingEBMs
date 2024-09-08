@@ -45,11 +45,6 @@ python -u methods/main.py --MCMC_refinement 100 --step_size 1  --enable_backward
 python -u methods/main.py --MCMC_refinement 10 --step_size 1  --enable_backward 1 --dataset_name 2spirals --delta_t 0.01 --methods velo_edfm --scheduler_type linear --source mask --num_itr 0 --eval_every 50000 --t 0.9 --itr_save 1000 --dfs_per_ebm 1  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 python -u methods/main.py --MCMC_refinement 1 --step_size 1  --enable_backward 1 --dataset_name 2spirals --delta_t 0.01 --methods velo_edfm --scheduler_type linear --source mask --num_itr 0 --eval_every 50000 --t 0.9 --itr_save 1000 --dfs_per_ebm 1  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 
-
-# python -u methods/main.py --MCMC_refinement 10000 --step_size 0.01 --ebm_init_mean 1 --enable_backward 1 --dataset_name 2spirals --delta_t 0.01 --methods velo_edfm --scheduler_type linear --source mask --num_itr 0 --eval_every 50000 --t 0.9 --itr_save 1000 --dfs_per_ebm 1  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-
-# python -u methods/main.py --MCMC_refinement 10000 --sampler dula --step_size 0.1  --enable_backward 1 --dataset_name 2spirals --delta_t 0.01 --methods velo_edfm --scheduler_type linear --source mask --num_itr 0 --eval_every 50000 --t 0.9 --itr_save 1000 --dfs_per_ebm 1  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-# python -u methods/main.py --MCMC_refinement 10000 --sampler dula --step_size 0.01 --ebm_init_mean 1 --enable_backward 1 --dataset_name 2spirals --delta_t 0.01 --methods velo_edfm --scheduler_type linear --source mask --num_itr 0 --eval_every 50000 --t 0.9 --itr_save 1000 --dfs_per_ebm 1  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 wait
 
 ############# SPECIFY JOB ABOVE ################

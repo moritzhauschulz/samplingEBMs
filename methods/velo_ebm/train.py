@@ -159,6 +159,8 @@ def main_loop_real(args, verbose=False):
                 
     itr = 1
     while itr <= args.num_itr:
+
+        sampler.step_size = args.step_size_start * args.step_size_end ** (itr/args.num_itr)
         
         dfs_model.train()
         ebm_model.eval()

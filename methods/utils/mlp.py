@@ -34,7 +34,7 @@ class MLPEBM_cat(nn.Module):
         xr_p = self.proj(xr)
         x_p = xr_p.view(x.size(0), x.size(1), self.n_proj)
         x_p = x_p.view(x.size(0), x.size(1) * self.n_proj)
-        return self.net(x_p)
+        return -self.net(x_p)
 
 
 def conv_transpose_3x3(in_planes, out_planes, stride=1):

@@ -144,6 +144,7 @@ def main_loop_real(args, verbose=False):
 
     #get sampler
     sampler = get_sampler(args) #for eval
+    refinement_sampler = get_sampler(args) #for refinement
 
     #set temperature
     temp = args.start_temp
@@ -192,8 +193,10 @@ def main_loop_real(args, verbose=False):
     plot(f'{args.sample_path}/post_warmup_dfs_samples_.png', torch.tensor(samples).float())
 
     itr = 1 
+    success_rate = None
+    refinement_sampler.step_size = args.step_size_start
     while itr <= args.num_itr:
-        
+             
         pbar = tqdm(train_loader) if verbose else train_loader
 
         dfs_gen_times = []
@@ -205,7 +208,19 @@ def main_loop_real(args, verbose=False):
             for param_group in ebm_optimizer.param_groups:
                 param_group['lr'] = ebm_lr
 
-        for itr, ((x, _), (x_source, _)) in enumerate(zip(pbar, cycle(source_train_loader))):
+        for _, ((x, _), (x_source, _)) in enumerate(zip(pbar, cycle(source_train_loader))):
+
+            if args.adaptive_step_size:
+                if itr % 50 == 0:
+                    if success_rate > 0.60:
+                        refinement_sampler.step_size *= 1.1
+                        print(f'increased step size to {refinement_sampler.step_size}')
+                    elif success_rate < 0.4:
+                        refinement_sampler.step_size *= 0.9
+                        print(f'decreased step size to {refinement_sampler.step_size}') 
+            else:
+                refinement_sampler.step_size = args.step_size_start * args.step_size_end ** (itr/args.num_itr)
+                
 
             dfs_model.train()
             ebm_model.eval()
@@ -222,19 +237,46 @@ def main_loop_real(args, verbose=False):
                     xt = preprocess(inner_x_source).long().to(args.device)
                 else:
                     xt = get_x0(B,D,S,args)
-                dfs_samples = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).detach()
-                for j in range(args.MCMC_refinement_dfs):
-                    dfs_samples = sampler.step(dfs_samples.float(), ebm_model).detach()
-                dfs_samples_list.append(dfs_samples.long())
-                q_probs_list.append(-ebm_model(dfs_samples.float()).squeeze())
-        
+
+                if args.ema_importance_sampling:
+                    dfs_samples = torch.tensor(gen_samples(ema_dfs_model, args, xt=xt)).to(args.device).detach()
+                    model = lambda x: -ema_ebm_model(x)
+                    for j in range(args.MCMC_refinement_dfs):
+                        dfs_samples = refinement_sampler.step(dfs_samples.float(), model).detach()
+                    dfs_samples_list.append(dfs_samples.long())
+                    q_probs_list.append(-ema_ebm_model(dfs_samples.float()).squeeze())
+                else:
+                    dfs_samples = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).detach()
+                    model = lambda x: -ebm_model(x)
+                    for j in range(args.MCMC_refinement_dfs):
+                        dfs_samples = refinement_sampler.step(dfs_samples.float(), model).detach()
+                    dfs_samples_list.append(dfs_samples.long())
+                    q_probs_list.append(-ebm_model(dfs_samples.float()).squeeze())
+                
+                if len(refinement_sampler.a_s) > 0:
+                    success_rate = sum(refinement_sampler.a_s[-args.MCMC_refinement_dfs:-1])/args.MCMC_refinement_dfs
+                else:
+                    success_rate = None
+                
             if args.source == 'data':
                 xt = preprocess(x_source).long().to(args.device)
             else:
                 xt = get_x0(B,D,S,args)
-            x_fake = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).detach().float()
-            for j in range(args.MCMC_refinement_ebm):
-                x_fake = sampler.step(x_fake, ebm_model).detach().float()
+            
+
+            if args.recycle_dfs_sample:
+                x_fake = dfs_samples
+            else:
+                if args.ema_negative_sampling:
+                    x_fake = torch.tensor(gen_samples(ema_dfs_model, args, xt=xt)).to(args.device).detach().float()
+                    model = lambda x: -ebm_model(x)
+                    for j in range(args.MCMC_refinement_ebm):
+                        x_fake = refinement_sampler.step(x_fake, model).detach().float()
+                else:
+                    x_fake = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).detach().float()
+                    model = lambda x: -ebm_model(x)
+                    for j in range(args.MCMC_refinement_ebm):
+                        x_fake = refinement_sampler.step(x_fake, model).detach().float()
             dfs_pause_time = time.time()
 
             #step EBM – get E_k+1
@@ -249,7 +291,6 @@ def main_loop_real(args, verbose=False):
             else:
                 grad_reg = 0.0
             logp_fake = -ebm_model(x_fake).squeeze()
-            # logp_fake = q_probs_list[-1] #can't be detached!
             obj = logp_real.mean() - logp_fake.mean()
             ebm_loss = -obj + grad_reg + args.l2 * ((logp_real ** 2.).mean() + (logp_fake ** 2.).mean()) #note sign of objective
 
@@ -294,6 +335,7 @@ def main_loop_real(args, verbose=False):
             ebm_times.append(ebm_end_time - ebm_start_time)
 
             if verbose:
+                print(f'success rate: {success_rate}')
                 pbar.set_description(f'Itr: {itr}\{args.num_itr}; Final DFS Loss: {dfs_loss}; EBM Loss: {ebm_loss}; mean logp_real: {logp_real.mean().item()}; mean logp_fake: {logp_fake.mean().item()}; Temp: {temp} \n {sum(dfs_gen_times)/(itr)} avg dfs step time: {sum(dfs_step_times)/(itr)}')
 
             if (itr % args.itr_save == 0) or (itr == args.num_itr):
@@ -313,6 +355,7 @@ def main_loop_real(args, verbose=False):
                 plot(f'{args.sample_path}/dfs_samples_{itr}.png', torch.tensor(samples).float())
                 samples = gen_samples(ema_dfs_model, args, batch_size=100, xt=xt)
                 plot(f'{args.sample_path}/ema_dfs_samples_{itr}.png', torch.tensor(samples).float())
+                plot(f'{args.sample_path}/x_fake_{itr}.png', x_fake.float())
                 weights_dir = f'{args.plot_path}/weights_histogram_{itr}.png'
                 if not os.path.exists(weights_dir):
                     plot_weight_histogram(weights, output_dir=weights_dir)
@@ -324,8 +367,22 @@ def main_loop_real(args, verbose=False):
                 for d in MCMC_pbar:
                     EBM_samples = sampler.step(EBM_samples.detach(), model).detach()
                     MCMC_pbar.set_description('MCMC Sampling in Progress...')
+                    if len(sampler.a_s) > 0:
+                        save_success_rate = sum(sampler.a_s[-args.save_sampling_steps:-1])/args.save_sampling_steps
+                        print(f'last acceptance rate in save sample was {save_success_rate}')
                 EBM_samples = EBM_samples.cpu().detach()
                 plot(f'{args.sample_path}/EBM_samples_{itr}_steps_{args.save_sampling_steps}.png', EBM_samples)
+                #save ebm samples that were obtained from init dist with same number of steps as used in refinement
+                EBM_samples = init_dist.sample((100,))
+                MCMC_pbar = tqdm(range(args.MCMC_refinement_dfs))
+                for d in MCMC_pbar:
+                    EBM_samples = refinement_sampler.step(EBM_samples.detach(), model).detach()
+                    MCMC_pbar.set_description('MCMC Sampling in Progress...')
+                    if len(sampler.a_s) > 0:
+                        save_success_rate = sum(refinement_sampler.a_s[-args.MCMC_refinement_dfs:-1])/args.MCMC_refinement_dfs
+                        print(f'last acceptance rate in save sample was {save_success_rate}')
+                EBM_samples = EBM_samples.cpu().detach()
+                plot(f'{args.sample_path}/EBM_samples_{itr}_ref_sampler_steps_{args.MCMC_refinement_dfs}.png', EBM_samples)
 
                 #save log
                 log_entry = {'itr':None,'timestamp':None}
@@ -333,6 +390,8 @@ def main_loop_real(args, verbose=False):
                 log_entry['ebm_loss'] = ebm_loss.item()
                 log_entry['temp'] = temp
                 log_entry['mean_weight'] = weights.mean().item()
+                log_entry['success_rate'] = success_rate
+                log_entry['step_size'] = refinement_sampler.step_size
 
                 timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
 
@@ -357,6 +416,9 @@ def main_loop_real(args, verbose=False):
                     log_entry['EMA Train log-likelihood'] = train_ll.item()
                     log_entry['EMA Train log-likelihood'] = val_ll.item()
                     log_entry['EMA Test log-likelihood'] = test_ll.item()
+                    log_entry['success_rate'] = success_rate
+                    log_entry['step_size'] = refinement_sampler.step_size
+
                     
                     for _i, _x in enumerate(ais_samples):
                         plot(f'{args.sample_path}/EBM_sample_{args.dataset_name}_{args.sampler}_{args.step_size}_{itr}_{_i}.png', _x)
@@ -418,7 +480,7 @@ def main_loop_toy(args, verbose=False):
     gibbs_sampler = GibbsSampler(n_choices = args.vocab_size, discrete_dim=args.discrete_dim, device=args.device)
 
     #get sampler for refinement
-    sampler = get_sampler(args)
+    refinement_sampler = get_sampler(args)
 
     # move to cuda
     ebm_model.to(args.device)
@@ -472,7 +534,21 @@ def main_loop_toy(args, verbose=False):
     plot(f'{args.sample_path}/post_warmup_dfs_samples_.png', torch.tensor(samples).float())
 
     pbar = tqdm(range(1, args.num_itr + 1)) if verbose else range(1,args.num_itr + 1)
+    
+    refinement_sampler.step_size = args.step_size_start
     for itr in pbar:
+
+        if args.adaptive_step_size:
+            if itr % 50 == 0:
+                if success_rate > 0.7:
+                    refinement_sampler.step_size *= 1.1
+                    print(f'increased step size to {refinement_sampler.step_size}')
+                elif success_rate < 0.4:
+                    refinement_sampler.step_size *= 0.9
+                    print(f'decreased step size to {refinement_sampler.step_size}') 
+        else:
+            refinement_sampler.step_size = args.step_size_start * args.step_size_end ** (itr/args.num_itr)
+            
         
         dfs_gen_times = []
         dfs_step_times = []
@@ -500,24 +576,44 @@ def main_loop_toy(args, verbose=False):
             else:
                 xt = get_x0(B,D,S,args)
 
-            dfs_samples = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).float().detach()
-            model = lambda x: -ebm_model(x)
-            for j in range(args.MCMC_refinement_dfs):
-                dfs_samples = sampler.step(dfs_samples, model).detach()
-            if len(sampler.a_s) > 0:
-                print(f'last acceptance prob: {sampler.a_s[-1]}')
-            dfs_samples_list.append(dfs_samples.long())
-            q_probs_list.append(-ebm_model(dfs_samples.float()).squeeze())
-    
+            if args.ema_importance_sampling:
+                dfs_samples = torch.tensor(gen_samples(ema_dfs_model, args, xt=xt)).to(args.device).detach()
+                model = lambda x: -ema_ebm_model(x)
+                for j in range(args.MCMC_refinement_dfs):
+                    dfs_samples = refinement_sampler.step(dfs_samples.float(), model).detach()
+                dfs_samples_list.append(dfs_samples.long())
+                q_probs_list.append(-ema_ebm_model(dfs_samples.float()).squeeze())
+            else:
+                dfs_samples = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).detach()
+                model = lambda x: -ebm_model(x)
+                for j in range(args.MCMC_refinement_dfs):
+                    dfs_samples = refinement_sampler.step(dfs_samples.float(), model).detach()
+                dfs_samples_list.append(dfs_samples.long())
+                q_probs_list.append(-ebm_model(dfs_samples.float()).squeeze())
+            
+            if len(refinement_sampler.a_s) > 0:
+                success_rate = sum(refinement_sampler.a_s[-args.MCMC_refinement_dfs:-1])/args.MCMC_refinement_dfs
+            else:
+                success_rate = None
+            
         if args.source == 'data':
             xt = torch.from_numpy(get_batch_data(db, args)).to(args.device)  
         else:
             xt = get_x0(B,D,S,args)
 
-        x_fake = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).float().detach()
-        model = lambda x: -ebm_model(x)
-        for j in range(args.MCMC_refinement_ebm):
-            dfs_samples = sampler.step(x_fake, model).detach()
+        if args.recycle_dfs_sample:
+            x_fake = dfs_samples
+        else:
+            if args.ema_negative_sampling:
+                x_fake = torch.tensor(gen_samples(ema_dfs_model, args, xt=xt)).to(args.device).detach().float()
+                model = lambda x: -ebm_model(x)
+                for j in range(args.MCMC_refinement_ebm):
+                    x_fake = refinement_sampler.step(x_fake, model).detach().float()
+            else:
+                x_fake = torch.tensor(gen_samples(dfs_model, args, xt=xt)).to(args.device).detach().float()
+                model = lambda x: -ebm_model(x)
+                for j in range(args.MCMC_refinement_ebm):
+                    x_fake = refinement_sampler.step(x_fake, model).detach().float()
         dfs_pause_time = time.time()
 
         #step EBM – get E_k+1
@@ -576,7 +672,7 @@ def main_loop_toy(args, verbose=False):
         ebm_times.append(ebm_end_time - ebm_start_time)
 
         if verbose:
-            pbar.set_description(f'Itr: {itr}\{args.num_itr}; EBM loss: {ebm_loss}, DFS loss: {dfs_loss} avg dfs gen time: {sum(dfs_gen_times)/(itr)} avg dfs step time: {sum(dfs_step_times)/(itr)} avg ebm step time: {sum(ebm_times)/(itr)}, mean logp_real was {logp_real.mean()}, mean logp_fake was {logp_fake.mean()}')
+            pbar.set_description(f'Itr: {itr}\{args.num_itr}; EBM loss: {ebm_loss}, DFS loss: {dfs_loss} avg dfs gen time: {sum(dfs_gen_times)/(itr)} avg dfs step time: {sum(dfs_step_times)/(itr)} avg ebm step time: {sum(ebm_times)/(itr)}, mean logp_real was {logp_real.mean()}, mean logp_fake was {logp_fake.mean()}, success rate {success_rate}')
 
         if (itr % args.itr_save == 0) or (itr == args.num_itr):
             eval_start_time = time.time()
@@ -612,6 +708,9 @@ def main_loop_toy(args, verbose=False):
             log_entry['ebm_loss'] = ebm_loss.item()
             log_entry['temp'] = temp
             log_entry['mean_weight'] = weights.mean().item()
+            log_entry['success_rate'] = success_rate
+            log_entry['step_size'] = refinement_sampler.step_size
+
 
             timestamp, cum_eval_time = get_eval_timestamp(eval_start_time, cum_eval_time, start_time)
 
@@ -634,6 +733,9 @@ def main_loop_toy(args, verbose=False):
                 log_entry['ebm_loss'] = ebm_loss.item()
                 log_entry['temp'] = temp
                 log_entry['mean_weight'] = weights.mean().item()
+                log_entry['success_rate'] = success_rate
+                log_entry['step_size'] = refinement_sampler.step_size
+
                 
                 #compute mmds 1/2
                 hamming_mmd, bandwidth, euclidean_mmd, sigma = sampler_evaluation(args, db, dfs_model, gen_samples)
@@ -656,11 +758,14 @@ def main_loop_toy(args, verbose=False):
                     ais_samples =  args.final_ais_samples
                     ais_num_steps = args.final_ais_num_steps
 
-                eval_start_time = time.time()
-
                 #compute nnl, ebm for ebm and log – takes much space
-                log_entry['ebm_nll'], log_entry['ebm_hamming_mmd'], log_entry['ebm_bandwidth'], log_entry['ebm_euclidean_mmd'], log_entry['ebm_sigma'] = ebm_evaluation(args, db, ebm_model, batch_size=4000, ais_samples=ais_samples, ais_num_steps=ais_num_steps)
-                
+                if itr % args.eval_nll_every == 0 or itr == args.num_itr:
+                    eval_nll = 1
+                else:
+                    eval_nll = 0
+                print(f'eval_nnl was {eval_nll} at itr {itr}')
+                log_entry['ebm_nll'], log_entry['ebm_hamming_mmd'], log_entry['ebm_bandwidth'], log_entry['ebm_euclidean_mmd'], log_entry['ebm_sigma'] = ebm_evaluation(args, db, ebm_model, batch_size=4000, ais_samples=ais_samples, ais_num_steps=ais_num_steps, eval_nll=eval_nll)
+
                 if log_entry['ebm_nll'] < 0:
                     print(f"NLL was below zero at {log_entry['ebm_nll']}")
                 if abs(log_entry['ebm_nll']) < abs(best_val_ll):

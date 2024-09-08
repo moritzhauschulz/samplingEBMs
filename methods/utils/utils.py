@@ -653,11 +653,11 @@ def get_sampler(args):
             sampler = samplers.MultiDiffSampler(data_dim, 1, approx=True, temp=2., n_samples=n_hops)
         elif args.sampler == "dmala":
             sampler = samplers.LangevinSampler(data_dim, 1,
-                                           fixed_proposal=False, approx=True, multi_hop=False, temp=2., step_size=args.step_size, mh=True)
+                                           fixed_proposal=False, approx=True, multi_hop=False, temp=args.sampler_temp, step_size=args.step_size, mh=True)
 
         elif args.sampler == "dula":
             sampler = samplers.LangevinSampler(data_dim, 1,
-                                           fixed_proposal=False, approx=True, multi_hop=False, temp=2., step_size=args.step_size, mh=False)
+                                           fixed_proposal=False, approx=True, multi_hop=False, temp=args.sampler_temp, step_size=args.step_size, mh=False)
         else:
             raise ValueError("Invalid sampler...")
     else:

@@ -63,6 +63,7 @@ def get_args():
     parser.add_argument('--MCMC_refinement_dfs', type=int, default=0)
     parser.add_argument('--use_MCMC', type=int, default=0, choices=[0,1])
     parser.add_argument('--use_buffer', type=int, default=0, choices=[0,1])
+    parser.add_argument('--adaptive_step_size', type=int, default=0, choices=[0,1])
     parser.add_argument('--sampler', type=str, default='dmala')
     parser.add_argument('--seed', type=int, default=1234567)
     parser.add_argument('--sampling_steps', type=int, default=40)
@@ -70,7 +71,12 @@ def get_args():
     parser.add_argument('--eval_sampling_steps', type=int, default=10000)
     parser.add_argument('--buffer_size', type=int, default=10000)
     parser.add_argument('--buffer_init', type=str, default='mean')
-    parser.add_argument('--step_size', type=float, default=0.1)
+    parser.add_argument('--step_size', type=float, default=0.1) #will be overridden
+    parser.add_argument('--step_size_start', type=float, default=0.1)
+    parser.add_argument('--step_size_end', type=float, default=0.1)
+    parser.add_argument('--ema_importance_sampling', type=int, default=0, choices=[0,1])
+    parser.add_argument('--ema_negative_sampling', type=int, default=0, choices=[0,1])
+    parser.add_argument('--sampler_temp', type=float, default=2.)
 
     #dfm/dfs related
     parser.add_argument('--dfs', type=int, choices=[0,1]) #only applies if the method is specified jointly for dfs/dfm (e.g. velo_ebm)
@@ -163,6 +169,7 @@ def get_args():
     parser.add_argument('--itr_save', default=1, type=int, help='num itrs between save')
     parser.add_argument('--eval_on', type=int, default=1, choices=[0,1])
     parser.add_argument('--eval_nll', type=int, default=1, choices=[0,1])
+    parser.add_argument('--eval_nll_every', type=int, default=0)
     parser.add_argument('--eval_every', type=int, default=50)
 
     parser.add_argument("--final_ais_samples", type=int, default=100000)
@@ -180,9 +187,8 @@ def get_args():
 
     #imputed args
     args.model_has_noise = 0
-    if args.methods in ['velo_dfm','velo_efm','velo_efm_ebm','velo_efm_ebm_bootstrap','velo_efm_ebm_bootstrap_2']:
-        if args.scheduler_type == 'quadratic_noise':
-            args.model_has_noise = 1
+    if args.scheduler_type == 'quadratic_noise':
+        args.model_has_noise = 1
 
     gpu = args.gpu
     if torch.cuda.is_available() and gpu >= 0:

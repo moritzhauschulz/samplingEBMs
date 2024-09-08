@@ -455,9 +455,12 @@ def rbf_mmd(x, y, args, sigma=None, log_path='toy_data_euclidean_dist_stats.csv'
   return mmd, sigma
 
 
-def ebm_evaluation(args, db, ebm, write_to_index=True, batch_size=4000, ais_samples=1000000, num_ais_mcmc_steps=25, ais_num_steps=1000):
+def ebm_evaluation(args, db, ebm, write_to_index=True, batch_size=4000, ais_samples=1000000, num_ais_mcmc_steps=25, ais_num_steps=1000, eval_nll = None):
   #NLL
-  if args.eval_nll:
+  if eval_nll is None:
+    eval_nll = args.eval_nll
+  if eval_nll:
+    print(f'starting ais as eval_nll was {eval_nll}')
     log_Z = annealed_importance_sampling(args, ebm, ais_samples, ais_num_steps, num_ais_mcmc_steps, args.discrete_dim)
     nll_samples = get_batch_data(db, args, batch_size=batch_size)
     nll_samples = torch.from_numpy(np.float32(nll_samples)).to(args.device)
