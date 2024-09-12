@@ -12,11 +12,6 @@ script_path="$0"
 filename=$(basename "$script_path" .pt)
 
 
-# Create the new directory name by appending '_output'
-output="./${filename}_output/"
-
-# Create the new directory in the current directory
-mkdir -p $output
 
 # Ensure correct PATH to your virtual environment
 export PATH=/vol/bitbucket/${USER}/samplingEBMs/.venv/bin:$PATH

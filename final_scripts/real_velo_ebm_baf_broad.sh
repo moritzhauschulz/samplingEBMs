@@ -39,10 +39,10 @@ counter=1
 
 ############# SPECIFY JOB BELOW ################
 
-python -u methods/main.py --eval_nll 0 --l2 0.1 --dfs 1 --ebm_init_mean 1 --dataset_name 2spirals --delta_t 0.05 --methods velo_ebm --scheduler_type linear --source mask --num_itr 200000 --eval_nll_every 200000 --eval_every 1000 --itr_save 1000 --dfs_per_ebm 1 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --eval_nll 0 --l2 0.1 --dfs 1 --ebm_init_mean 1 --dataset_name 2spirals --delta_t 0.05 --methods velo_ebm --scheduler_type linear --source mask --num_itr 200000 --eval_nll_every 200000 --eval_every 1000 --itr_save 1000 --dfs_per_ebm 10   > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+#on dfm
+python -u methods/main.py --dfs 0  --l2 0.00001 --batch_size 100 --ebm_init_mean 1 --enable_backward 1 --dataset_name static_mnist --delta_t 0.01 --methods velo_baf_ebm --scheduler_type linear --source uniform --num_itr 50000 --eval_every 5000 --t 0.25 --delta_t 0.05  --itr_save 1000 --dfs_per_ebm 1  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --dfs 0  --l2 0.00001 --batch_size 100 --ebm_init_mean 1 --enable_backward 1 --dataset_name static_mnist --delta_t 0.01 --methods velo_baf_ebm --scheduler_type linear --source uniform --num_itr 50000 --eval_every 5000 --t 0.75 --delta_t 0.05  --itr_save 1000 --dfs_per_ebm 1  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 wait
-
 ############# SPECIFY JOB ABOVE ################
 echo "Job finished at $(date)"
 

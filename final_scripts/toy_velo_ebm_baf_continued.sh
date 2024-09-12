@@ -12,11 +12,6 @@ script_path="$0"
 filename=$(basename "$script_path" .pt)
 
 
-# Create the new directory name by appending '_output'
-output="./${filename}_output/"
-
-# Create the new directory in the current directory
-mkdir -p $output
 
 # Ensure correct PATH to your virtual environment
 export PATH=/vol/bitbucket/${USER}/samplingEBMs/.venv/bin:$PATH
@@ -39,8 +34,9 @@ counter=1
 
 ############# SPECIFY JOB BELOW ################
 
-python -u methods/main.py --eval_nll 0 --l2 0.1 --dfs 1 --ebm_init_mean 1 --dataset_name 2spirals --delta_t 0.05 --methods velo_ebm --scheduler_type linear --source mask --num_itr 200000 --eval_nll_every 200000 --eval_every 1000 --itr_save 1000 --dfs_per_ebm 1 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --eval_nll 0 --l2 0.1 --dfs 1 --ebm_init_mean 1 --dataset_name 2spirals --delta_t 0.05 --methods velo_ebm --scheduler_type linear --source mask --num_itr 200000 --eval_nll_every 200000 --eval_every 1000 --itr_save 1000 --dfs_per_ebm 10   > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+#on dfm
+python -u methods/main.py --model_has_noise 1 --start_itr 100000 --dfs_checkpoint methods/velo_baf_ebm/experiments/2spirals/2spirals_41/ckpts/dfs_model_100000.pt --ebm_checkpoint methods/velo_baf_ebm/experiments/2spirals/2spirals_41/ckpts/ebm_model_100000.pt  --dfs 0 --l2 0.1 --ebm_init_mean 1 --enable_backward 1 --dataset_name 2spirals --delta_t 0.01 --methods velo_baf_ebm --scheduler_type linear --source mask --num_itr 100000 --eval_every 100000 --t 0.5 --itr_save 1000 --dfs_per_ebm 1  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+
 wait
 
 ############# SPECIFY JOB ABOVE ################

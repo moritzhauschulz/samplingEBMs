@@ -39,7 +39,7 @@ counter=1
 
 ############# SPECIFY JOB BELOW ################
 
-python -u methods/main.py --eval_nll 0 --l2 0.1 --lr 0.001 --dfs 1 --ebm_init_mean 1 --dataset_name 2spirals --delta_t 0.05 --methods velo_ebm --scheduler_type linear --source mask --num_itr 100000 --eval_every 1000 --itr_save 1000 --dfs_per_ebm 1 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
+python -u methods/main.py --eval_nll 0 --l2 0.1 --lr 0.001 --dfs 1 --ebm_init_mean 1 --dataset_name 2spirals --delta_t 0.05 --methods velo_ebm --scheduler_type linear --source mask --num_itr 200000 --eval_nll_every 200000 --eval_every 1000 --itr_save 1000 --dfs_per_ebm 1 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 wait
 
 ############# SPECIFY JOB ABOVE ################

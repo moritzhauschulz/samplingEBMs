@@ -11,13 +11,6 @@
 script_path="$0"
 filename=$(basename "$script_path" .pt)
 
-
-# Create the new directory name by appending '_output'
-output="./${filename}_output/"
-
-# Create the new directory in the current directory
-mkdir -p $output
-
 # Ensure correct PATH to your virtual environment
 export PATH=/vol/bitbucket/${USER}/samplingEBMs/.venv/bin:$PATH
 source /vol/bitbucket/${USER}/samplingEBMs/.venv/bin/activate
@@ -36,12 +29,36 @@ echo "Starting job ${filename} at $(date)"
 
 # Initialize the counter
 counter=1
-
 ############# SPECIFY JOB BELOW ################
+#static mnist
+python -u methods/eval_ais.py \
+    --ebm_model methods/velo_bootstrap_ebm/experiments/static_mnist/static_mnist_56/ckpts/best_ema_ebm_ckpt_static_mnist_dmala_0.1_35000.pt \
+    --sampler dmala \
+    --eval_step_size 0.1 \
+    --sampling_steps 40 \
+    --n_samples 500 \
+    --eval_sampling_steps 300000 \
+    --viz_every 10;
 
-python -u methods/main.py --eval_nll 0 --l2 0.1 --dfs 1 --ebm_init_mean 1 --dataset_name 2spirals --delta_t 0.05 --methods velo_ebm --scheduler_type linear --source mask --num_itr 200000 --eval_nll_every 200000 --eval_every 1000 --itr_save 1000 --dfs_per_ebm 1 > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --eval_nll 0 --l2 0.1 --dfs 1 --ebm_init_mean 1 --dataset_name 2spirals --delta_t 0.05 --methods velo_ebm --scheduler_type linear --source mask --num_itr 200000 --eval_nll_every 200000 --eval_every 1000 --itr_save 1000 --dfs_per_ebm 10   > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-wait
+#static mnist
+python -u methods/eval_ais.py \
+    --ebm_model methods/velo_bootstrap_ebm/experiments/static_mnist/static_mnist_57/ckpts/best_ema_ebm_ckpt_static_mnist_dmala_0.1_45000.pt \
+    --sampler dmala \
+    --eval_step_size 0.1 \
+    --sampling_steps 40 \
+    --n_samples 500 \
+    --eval_sampling_steps 300000 \
+    --viz_every 10;
+
+#static mnist
+python -u methods/eval_ais.py \
+    --ebm_model methods/velo_bootstrap_ebm/experiments/static_mnist/static_mnist_58/ckpts/best_ema_ebm_ckpt_static_mnist_dmala_0.1_45000.pt \
+    --sampler dmala \
+    --eval_step_size 0.1 \
+    --sampling_steps 40 \
+    --n_samples 500 \
+    --eval_sampling_steps 300000 \
+    --viz_every 10;
 
 ############# SPECIFY JOB ABOVE ################
 echo "Job finished at $(date)"

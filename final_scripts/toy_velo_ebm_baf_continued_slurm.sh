@@ -34,14 +34,12 @@ echo "Job started at $(date)"
 
 # Initialize the counter
 counter=1
-
 ############# SPECIFY JOB BELOW ################
 
 #on dfm
-python -u methods/main.py --dfs 0 --l2 0.0001 --step_size_start 0.2 --adaptive_step_size 1 --dfs_warmup_iter 2000 --sampler dmala --MCMC_refinement_dfs 20 --recycle_dfs_sample 1  --dataset_name static_mnist --batch_size 100 --delta_t 0.05 --methods velo_bootstrap_ebm --scheduler_type linear --source uniform --num_itr 50000 --eval_every 5000 --itr_save 5000 --dfs_per_ebm 1  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-python -u methods/main.py --dfs 1 --l2 0.001 --step_size_start 0.2 --adaptive_step_size 1 --dfs_warmup_iter 2000 --sampler dmala --MCMC_refinement_dfs 20 --recycle_dfs_sample 1  --dataset_name static_mnist --batch_size 100 --delta_t 0.05 --methods velo_bootstrap_ebm --scheduler_type linear --source uniform --num_itr 50000 --eval_every 5000 --itr_save 5000 --dfs_per_ebm 1  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
-wait
+python -u methods/main.py --model_has_noise 1 --start_itr 100000 --dfs_checkpoint methods/velo_baf_ebm/experiments/2spirals/2spirals_41/ckpts/dfs_model_100000.pt --ebm_checkpoint methods/velo_baf_ebm/experiments/2spirals/2spirals_41/ckpts/ebm_model_100000.pt  --dfs 0 --l2 0.1 --ebm_init_mean 1 --enable_backward 1 --dataset_name 2spirals --delta_t 0.01 --methods velo_baf_ebm --scheduler_type linear --source mask --num_itr 100000 --eval_every 100000 --t 0.5 --itr_save 1000 --dfs_per_ebm 1  > ${output_date}/output${counter}.log 2>&1 & ((counter++))
 
+wait
 
 ############# SPECIFY JOB ABOVE ################
 echo "Job finished at $(date)"
