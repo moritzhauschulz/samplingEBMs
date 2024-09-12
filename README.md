@@ -6,7 +6,7 @@ Training energy-based models with contrastive divergence is a challenging proble
 
 ## Author
 
-- **Moritz Elias Hauschulz** - Imperial College London
+- **Moritz Elias Hauschulz** - Imperial College London - moritz.hauschulz@gmail.com
 
 ## Supervisors
 
