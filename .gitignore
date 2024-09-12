@@ -14,6 +14,7 @@ test.ipynb
 **.csv
 mmd_results
 **_output/
+**/output/
 /model_graveyard/
 /final_report_utils/
 /final_scripts/
