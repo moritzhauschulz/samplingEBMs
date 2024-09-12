@@ -48,7 +48,7 @@ To reproduce the results or use the model, follow these steps:
     - Set appropriate paths in `methods/utils/vamp_utils.py`
     - The synthetic datasets are from the `scikit-learn` library and do not require download
 
-4. Run example codes (here specified only for toy data):
+4. Run example codes (here specified only for toy data, and excluding models that reequire pretrained EBMs):
     ```bash 
     bash example_scripts/velo_dfm.sh
     ```
