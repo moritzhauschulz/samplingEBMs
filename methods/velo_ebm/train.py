@@ -573,8 +573,13 @@ def main_loop_toy(args, verbose=False):
                 eval_start_time = time.time()
 
                 #compute nnl, ebm for ebm and log – takes much space
-                log_entry['ebm_nll'], log_entry['ebm_hamming_mmd'], log_entry['ebm_bandwidth'], log_entry['ebm_euclidean_mmd'], log_entry['ebm_sigma'] = ebm_evaluation(args, db, ebm_model, batch_size=4000, ais_samples=ais_samples, ais_num_steps=ais_num_steps)
-                
+                if itr % args.eval_nll_every == 0 or itr == args.num_itr:
+                    eval_nll = 1
+                else:
+                    eval_nll = 0
+                print(f'eval_nnl was {eval_nll} at itr {itr}')
+                log_entry['ebm_nll'], log_entry['ebm_hamming_mmd'], log_entry['ebm_bandwidth'], log_entry['ebm_euclidean_mmd'], log_entry['ebm_sigma'] = ebm_evaluation(args, db, ebm_model, batch_size=4000, ais_samples=ais_samples, ais_num_steps=ais_num_steps, eval_nll=eval_nll)
+
                 if log_entry['ebm_nll'] < 0:
                     print(f"NLL was below zero at {log_entry['ebm_nll']}")
                 if abs(log_entry['ebm_nll']) < abs(best_val_ll):

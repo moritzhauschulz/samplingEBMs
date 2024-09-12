@@ -1,6 +1,9 @@
 #test
 test.ipynb
+
+#venv
 .vscode/
+.venv/
 
 #results
 **/datasets/
@@ -13,6 +16,9 @@ mmd_results
 **_output/
 /model_graveyard/
 /final_report_utils/
+/final_scripts/
+/model_graveyard/
+/scripts/
 
 
 #env

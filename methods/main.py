@@ -45,9 +45,9 @@ def get_args():
     parser.add_argument('--vocab_size', type=int, default=2)
 
     #ebm related
-    parser.add_argument('--ebm_init_mean', type=int, default=0, choices=[0,1])
-    parser.add_argument('--ebm_model', type=str, default='resnet-64')
-    parser.add_argument('--checkpoint', type=str, default=None)
+    parser.add_argument('--ebm_init_mean', type=int, default=1, choices=[0,1])
+    parser.add_argument('--ebm_model', type=str, default='mlp-256')
+    parser.add_argument('--ebm_checkpoint', type=str, default=None)
     parser.add_argument('--pretrained_ebm', type=str, default='auto')
     parser.add_argument('--p_control', type=float, default=0.0)
     parser.add_argument('--gradnorm', "--gn", type=float, default=0.0)
@@ -77,11 +77,15 @@ def get_args():
     parser.add_argument('--ema_importance_sampling', type=int, default=0, choices=[0,1])
     parser.add_argument('--ema_negative_sampling', type=int, default=0, choices=[0,1])
     parser.add_argument('--sampler_temp', type=float, default=2.)
+    parser.add_argument('--eval_step_size', type=float, default=0.1)
+    parser.add_argument('--save_EBM_samples', type=int, default=0, choices=[0,1])
+    parser.add_argument('--start_itr', type=int, default=0)
+
 
     #dfm/dfs related
     parser.add_argument('--dfs', type=int, choices=[0,1]) #only applies if the method is specified jointly for dfs/dfm (e.g. velo_ebm)
     parser.add_argument('--use_ema_dfs', type=int, default=0, choices=[0,1]) #only applies if the method is specified jointly for dfs/dfm (e.g. velo_ebm)
-
+    parser.add_argument('--dfs_checkpoint', type=str, default=None)
     parser.add_argument('--enable_backward', type=int, default=0, choices=[0,1])
     parser.add_argument('--lr', type=float, default=.0001)
     parser.add_argument('--scheduler_type', type=str, default='linear', choices=['cubic','quadratic', 'quadratic_noise', 'linear'])
@@ -118,6 +122,7 @@ def get_args():
     #back and forth
     parser.add_argument("--rand_t", "--rt", type=int, default=0, choices=[0, 1])
     parser.add_argument("--lin_t", "--lt", type=int, default=0, choices=[0, 1])
+    parser.add_argument("--baf_on_ebm", type=int, default=1, choices=[0, 1])
     parser.add_argument("--warmup_baf", "--wbaf", type=lambda x: int(float(x)), default=5, help="need to use w/ lin_t")
     parser.add_argument("--t", type=float, default=-1.0, help="for gfn back forth negative sample generation")
     parser.add_argument("--ebm_with_mh", "--ewm", type=int, default=1, choices=[0, 1])
@@ -128,7 +133,7 @@ def get_args():
     #gfn related
     parser.add_argument("--down_sample", "--ds", default=0, type=int, choices=[0, 1])
     parser.add_argument('--ebm_every', "--ee", type=int, default=1)
-    parser.add_argument('--print_every', "--pe", type=int, default=100)
+    parser.add_argument('--print_every', "--pe", type=int, default=50)
     parser.add_argument('--plot_every', type=int, default=2500)
     parser.add_argument("--gfn_per_itr", type=int, default=1, help="GFN training frequency")
     parser.add_argument("--ebm_per_itr", type=int, default=1, help="EBM training frequency")
@@ -164,12 +169,12 @@ def get_args():
     parser.add_argument('--ema', type=float, default=0.999)
     parser.add_argument('--gpu', type=int, default=0, help='-1: cpu; 0 - ?: specific gpu index')
     parser.add_argument('--batch_size', default=128, type=int, help='batch size')
-    parser.add_argument('--test_batch_size', type=int, default=128)
+    parser.add_argument('--test_batch_size', type=int, default=100)
     parser.add_argument('--num_itr', default=200, type=int, help='num itr')
     parser.add_argument('--itr_save', default=1, type=int, help='num itrs between save')
     parser.add_argument('--eval_on', type=int, default=1, choices=[0,1])
     parser.add_argument('--eval_nll', type=int, default=1, choices=[0,1])
-    parser.add_argument('--eval_nll_every', type=int, default=0)
+    parser.add_argument('--eval_nll_every', type=int, default=2)
     parser.add_argument('--eval_every', type=int, default=50)
 
     parser.add_argument("--final_ais_samples", type=int, default=100000)
@@ -182,11 +187,11 @@ def get_args():
     parser.add_argument('--optional_step', type=int, default=0, choices=[0,1])
     parser.add_argument('--alpha', type=float, default=0.25)
     parser.add_argument('--recycle_dfs_sample', type=int, default=0, choices=[0,1])
+    parser.add_argument('--model_has_noise', type=int, default=0, choices=[0,1])
     
     args = parser.parse_args()
 
     #imputed args
-    args.model_has_noise = 0
     if args.scheduler_type == 'quadratic_noise':
         args.model_has_noise = 1
 

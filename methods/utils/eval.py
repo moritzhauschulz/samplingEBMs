@@ -456,6 +456,22 @@ def rbf_mmd(x, y, args, sigma=None, log_path='toy_data_euclidean_dist_stats.csv'
 
 
 def ebm_evaluation(args, db, ebm, write_to_index=True, batch_size=4000, ais_samples=1000000, num_ais_mcmc_steps=25, ais_num_steps=1000, eval_nll = None):
+  #MDD
+  exp_hamming_mmd_list = []
+  rbf_mmd_list = []
+  for k in range(10):
+    print('starting MMD iteration {k}')
+    gibbs_sampler = GibbsSampler(n_choices = args.vocab_size, discrete_dim=args.discrete_dim, device=args.device)
+    x = gibbs_sampler(ebm, num_rounds=args.gibbs_num_rounds, num_samples=batch_size).to('cpu')
+    y = get_batch_data(db, args, batch_size=batch_size)
+    y = torch.from_numpy(np.float32(y)).to('cpu')
+    hamming_mmd, bandwidth = exp_hamming_mmd(x,y,args)
+    euclidean_mmd, sigma = rbf_mmd(x,y,args)
+    exp_hamming_mmd_list.append(hamming_mmd)
+    rbf_mmd_list.append(euclidean_mmd)
+  hamming_mmd = sum(exp_hamming_mmd_list)/10
+  euclidean_mmd = sum(rbf_mmd_list)/10
+
   #NLL
   if eval_nll is None:
     eval_nll = args.eval_nll
@@ -470,20 +486,6 @@ def ebm_evaluation(args, db, ebm, write_to_index=True, batch_size=4000, ais_samp
   else:
     nll = torch.tensor(0)
 
-  #MDD
-  exp_hamming_mmd_list = []
-  rbf_mmd_list = []
-  for _ in range(10):
-    gibbs_sampler = GibbsSampler(n_choices = args.vocab_size, discrete_dim=args.discrete_dim, device=args.device)
-    x = gibbs_sampler(ebm, num_rounds=args.gibbs_num_rounds, num_samples=batch_size).to('cpu')
-    y = get_batch_data(db, args, batch_size=batch_size)
-    y = torch.from_numpy(np.float32(y)).to('cpu')
-    hamming_mmd, bandwidth = exp_hamming_mmd(x,y,args)
-    euclidean_mmd, sigma = rbf_mmd(x,y,args)
-    exp_hamming_mmd_list.append(hamming_mmd)
-    rbf_mmd_list.append(euclidean_mmd)
-  hamming_mmd = sum(exp_hamming_mmd_list)/10
-  euclidean_mmd = sum(rbf_mmd_list)/10
 
   # print(f'NLL on {batch_size} samples with AIS on {ais_samples} samlpes: {nll}; Final exponential Hamming MMD on 10x{batch_size} samples: {mmd}')
   

@@ -1,3 +1,0 @@
-/var/spool/slurm/d/job124849/slurm_script: line 39: /output1.log: Permission denied
-/var/spool/slurm/d/job124849/slurm_script: line 40: /output2.log: Permission denied
-/var/spool/slurm/d/job124849/slurm_script: line 41: /output3.log: Permission denied

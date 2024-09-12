@@ -182,7 +182,7 @@ def main_loop_real(args, verbose=False):
 
         log_q_prob = q_dist.log_prob(x1.float()).sum(dim=-1).to(args.device)
 
-        dfs_loss, weights, temp = compute_loss(dfs_model, B, D, S, log_p_prob, log_q_prob, t, x1, x0, args, temp)
+        dfs_loss, weights, temp = compute_eloss(dfs_model, B, D, S, log_p_prob, log_q_prob, t, x1, x0, args, temp)
         
         dfs_optimizer.zero_grad()
         dfs_loss.backward()
@@ -201,15 +201,14 @@ def main_loop_real(args, verbose=False):
     samples = gen_samples(dfs_model, args, batch_size = 2500, xt=xt)
     plot(f'{args.sample_path}/post_warmup_dfs_samples_.png', torch.tensor(samples).float())
 
+    dfs_times = []
+    dfs_optional_times = []
+    ebm_times = []
     itr = 1
     while itr <= args.num_itr:
         dfs_model.train()
         ebm_model.train()
         pbar = tqdm(train_loader) if verbose else train_loader
-
-        dfs_times = []
-        dfs_optional_times = []
-        ebm_times = []
 
         if itr < args.warmup_iters:
             ebm_lr = args.ebm_lr * float(itr) / args.warmup_iters
@@ -302,7 +301,7 @@ def main_loop_real(args, verbose=False):
 
             ebm_end_time = time.time()
 
-            #without the optional step for now
+            #optional step towards ebm
             dfs_restart_time = time.time()
             if args.optional_step:
                 logp_dfs_old = logp_dfs
@@ -321,7 +320,7 @@ def main_loop_real(args, verbose=False):
             
 
             if verbose:
-                pbar.set_description(f'Itr: {itr}\{args.num_itr}; EBM loss: {ebm_loss.item()} ({ebm_data_loss.item(), ebm_dfs_loss.item()}), DFS loss: {dfs_loss.item()} avg dfs time: {sum(dfs_times)/(it+1)} avg dfs optional time: {sum(dfs_optional_times)/(it+1)} \n avg ebm step time: {sum(ebm_times)/(it+1)}, mean logp_real was {logp_real.mean()}, mean logp_fake was {logp_fake.mean()}')
+                pbar.set_description(f'Itr: {itr}\{args.num_itr}; EBM loss: {ebm_loss.item()} ({ebm_data_loss.item(), ebm_dfs_loss.item()}), DFS loss: {dfs_loss.item()} avg dfs time: {sum(dfs_times)/(itr)} avg dfs optional time: {sum(dfs_optional_times)/(itr)} \n avg ebm step time: {sum(ebm_times)/(itr)}, mean logp_real was {logp_real.mean()}, mean logp_fake was {logp_fake.mean()}')
             
 
             if (itr % args.itr_save == 0) or (itr == args.num_itr):
