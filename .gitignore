@@ -18,8 +18,10 @@ mmd_results
 /model_graveyard/
 /final_report_utils/
 /final_scripts/
+!/final_scripts/*.sh
 /model_graveyard/
 /scripts/
+!/scripts/*.sh
 
 
 #env
