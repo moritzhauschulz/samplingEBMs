@@ -1,6 +1,6 @@
 # Training Energy Based Models by Learning to Sample with Discrete Flows
 
-The final manuscript is here: [https://raw.githubusercontent.com/moritzhauschulz/samplingEBMs/main/REPORT.pdf](https://raw.githubusercontent.com/moritzhauschulz/samplingEBMs/main/REPORT.pdf)
+The **final manuscript** is here: [https://raw.githubusercontent.com/moritzhauschulz/samplingEBMs/main/REPORT.pdf](https://raw.githubusercontent.com/moritzhauschulz/samplingEBMs/main/REPORT.pdf)
 
 ## Abstract
 
