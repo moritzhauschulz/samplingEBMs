@@ -21,7 +21,7 @@ mmd_results
 !/final_scripts/*.sh
 /model_graveyard/
 /scripts/*
-!/scripts/*.sh
+#!/scripts/*.sh
 
 
 #env
